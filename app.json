@@ -1,25 +1,61 @@
 {
   "expo": {
-    "name": "step-league",
+    "name": "StepLeague",
     "slug": "step-league",
+    "scheme": "stepleague",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yourcompany.stepleague",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "StepLeague reads your daily step count so it can update your standing in your leagues.",
+        "NSHealthUpdateUsageDescription": "StepLeague does not write any health data. This permission is required by Apple even for read-only access."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true
+      }
     },
     "android": {
+      "package": "com.yourcompany.stepleague",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.ACTIVITY_RECOGNITION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      [
+        "react-native-health",
+        {
+          "isClinicalDataEnabled": false,
+          "healthSharePermission": "StepLeague reads your daily step count to update your league standing.",
+          "healthUpdatePermission": "StepLeague does not write health data."
+        }
+      ],
+      [
+        "react-native-health-connect",
+        {
+          "permissions": ["android.permission.health.READ_STEPS"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
