@@ -1,6 +1,7 @@
 import AppleHealthKit, { type HealthValue } from 'react-native-health';
 
 import { DAYS_TO_BACKFILL, dateKeyInTimezone, upsertDailySteps } from './steps-shared';
+import { reportSyncFailure, reportSyncSuccess } from './sync-status';
 
 /**
  * Step sync for iOS — reads whatever HealthKit already has and upserts it
@@ -13,8 +14,12 @@ import { DAYS_TO_BACKFILL, dateKeyInTimezone, upsertDailySteps } from './steps-s
  * guaranteed time — not worth the complexity for a v1. Tell users in
  * onboarding to open the app once before bed so tonight's steps are synced
  * before the 22:00 rollup.
+ *
+ * `daysToBackfill` defaults to a full week; the frequent "live" poll (see
+ * useStepSync) passes 0 to only re-fetch today, keeping the frequent path
+ * cheap even though HealthKit itself returns a whole range in one call.
  */
-export async function syncSteps(userId: string, timezone: string): Promise<void> {
+export async function syncSteps(timezone: string, daysToBackfill: number = DAYS_TO_BACKFILL): Promise<void> {
   try {
     await new Promise<void>((resolve, reject) => {
       AppleHealthKit.initHealthKit(
@@ -25,7 +30,7 @@ export async function syncSteps(userId: string, timezone: string): Promise<void>
 
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - DAYS_TO_BACKFILL);
+    startDate.setDate(startDate.getDate() - daysToBackfill);
 
     const samples = await new Promise<HealthValue[]>((resolve, reject) => {
       AppleHealthKit.getDailyStepCountSamples(
@@ -42,13 +47,14 @@ export async function syncSteps(userId: string, timezone: string): Promise<void>
       totals.set(key, (totals.get(key) ?? 0) + sample.value);
     }
 
-    await upsertDailySteps(
-      userId,
-      Array.from(totals, ([date, steps]) => ({ date, steps: Math.round(steps) }))
-    );
+    await upsertDailySteps(Array.from(totals, ([date, steps]) => ({ date, steps: Math.round(steps) })));
+    reportSyncSuccess();
   } catch (err) {
     // Sync failures shouldn't crash the app — just means stale numbers
-    // until the next successful sync.
-    console.warn('[steps.ios] sync failed:', err instanceof Error ? err.message : err);
+    // until the next successful sync. reportSyncFailure surfaces *why* on
+    // the home screen instead of only in a console.warn nobody sees.
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[steps.ios] sync failed:', message);
+    reportSyncFailure(message);
   }
 }

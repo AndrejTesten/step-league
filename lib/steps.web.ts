@@ -5,6 +5,6 @@
  * this stub exists only so `expo start --web` doesn't crash on import
  * resolution while you're poking at UI in a browser during development.
  */
-export async function syncSteps(_userId: string, _timezone: string): Promise<void> {
+export async function syncSteps(_timezone: string, _daysToBackfill?: number): Promise<void> {
   console.warn('[steps.web] Step sync is not available on web.');
 }

@@ -10,19 +10,20 @@ export function dateKeyInTimezone(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(date);
 }
 
-export async function upsertDailySteps(
-  userId: string,
-  entries: { date: string; steps: number }[]
-): Promise<void> {
+export async function upsertDailySteps(entries: { date: string; steps: number }[]): Promise<void> {
   if (entries.length === 0) return;
-  const { error } = await supabase.from('daily_steps').upsert(
-    entries.map((e) => ({
-      user_id: userId,
-      date: e.date,
-      steps: e.steps,
-      updated_at: new Date().toISOString(),
-    })),
-    { onConflict: 'user_id,date' }
-  );
-  if (error) throw error;
+  // Goes through upsert_daily_steps_monotonic (see supabase/schema.sql)
+  // instead of a plain upsert — HealthKit/Health Connect can revise a day's
+  // total downward (a corrected overcount, a narrower sync window), and a
+  // plain overwrite would make the displayed step count visibly drop. The
+  // DB takes greatest(existing, incoming) atomically, under auth.uid(), so
+  // it can only go up.
+  const { error } = await supabase.rpc('upsert_daily_steps_monotonic', {
+    p_entries: entries.map((e) => ({ date: e.date, steps: e.steps })),
+  });
+  // Supabase's PostgrestError is a plain object, not an Error instance —
+  // `throw error` here made every caller's `err instanceof Error` check
+  // fail and fall back to String(err), which stringifies it as
+  // "[object Object]" instead of the actual message.
+  if (error) throw new Error(error.message);
 }

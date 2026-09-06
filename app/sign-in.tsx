@@ -4,9 +4,10 @@ import { KeyboardAvoidingView, Platform, View } from 'react-native';
 
 import { Button, Input, Muted, Screen, Title } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
-import { theme } from '@/lib/theme';
+import { theme, useThemeColors } from '@/lib/theme';
 
 export default function SignIn() {
+  const colors = useThemeColors();
   const { signIn } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,7 +42,7 @@ export default function SignIn() {
         />
         <Input placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
 
-        {error && <Muted style={{ color: theme.color.danger }}>{error}</Muted>}
+        {error && <Muted style={{ color: colors.danger }}>{error}</Muted>}
 
         <Button label="Sign in" onPress={handleSignIn} loading={loading} />
 

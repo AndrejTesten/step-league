@@ -1,37 +1,56 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 
 import { Button, Card, Heading, Input, Muted, Screen } from '@/components/ui';
+import { getErrorMessage } from '@/lib/errors';
 import { joinLeague, previewLeague } from '@/lib/leagues';
-import { theme } from '@/lib/theme';
+import { theme, useThemeColors } from '@/lib/theme';
+
+const INVITE_CODE_LENGTH = 6;
 
 export default function JoinLeague() {
+  const colors = useThemeColors();
   const [code, setCode] = useState('');
-  const [preview, setPreview] = useState<{ name: string; deadline: string; member_count: number } | null>(
+  const [preview, setPreview] = useState<{ id: string; name: string; deadline: string; member_count: number } | null>(
     null
   );
+  const [looking, setLooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleLookup() {
-    setError(null);
+  // Invite codes are always exactly 6 characters (see
+  // generate_invite_code() in supabase/schema.sql), so we can look one up
+  // automatically the moment it's fully typed instead of waiting on a
+  // manual submit.
+  useEffect(() => {
     setPreview(null);
-    if (code.trim().length < 4) return;
-    try {
-      setPreview(await previewLeague(code.trim()));
-    } catch {
-      setError('No league found for that code.');
-    }
-  }
+    setError(null);
+    if (code.length !== INVITE_CODE_LENGTH) return;
+    let cancelled = false;
+    setLooking(true);
+    previewLeague(code)
+      .then((result) => {
+        if (!cancelled) setPreview(result);
+      })
+      .catch(() => {
+        if (!cancelled) setError('No league found for that code.');
+      })
+      .finally(() => {
+        if (!cancelled) setLooking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
   async function handleJoin() {
     setLoading(true);
     setError(null);
     try {
-      const leagueId = await joinLeague(code.trim());
+      const leagueId = await joinLeague(code);
       router.replace(`/leagues/${leagueId}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not join that league.');
+      setError(getErrorMessage(e, 'Could not join that league.'));
     } finally {
       setLoading(false);
     }
@@ -42,11 +61,12 @@ export default function JoinLeague() {
       <Input
         placeholder="Invite code"
         autoCapitalize="characters"
+        maxLength={INVITE_CODE_LENGTH}
         value={code}
-        onChangeText={(t) => setCode(t.toUpperCase())}
-        onEndEditing={handleLookup}
-        onSubmitEditing={handleLookup}
+        onChangeText={(t) => setCode(t.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
       />
+
+      {looking && <Muted>Looking up…</Muted>}
 
       {preview && (
         <Card>
@@ -58,7 +78,7 @@ export default function JoinLeague() {
         </Card>
       )}
 
-      {error && <Muted style={{ color: theme.color.danger }}>{error}</Muted>}
+      {error && <Muted style={{ color: colors.danger }}>{error}</Muted>}
 
       <Button label="Join league" onPress={handleJoin} loading={loading} disabled={!preview} />
     </Screen>

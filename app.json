@@ -13,7 +13,9 @@
       "bundleIdentifier": "com.yourcompany.stepleague",
       "infoPlist": {
         "NSHealthShareUsageDescription": "StepLeague reads your daily step count so it can update your standing in your leagues.",
-        "NSHealthUpdateUsageDescription": "StepLeague does not write any health data. This permission is required by Apple even for read-only access."
+        "NSHealthUpdateUsageDescription": "StepLeague does not write any health data. This permission is required by Apple even for read-only access.",
+        "NSPhotoLibraryUsageDescription": "StepLeague needs access to your photos so you can set a profile picture.",
+        "NSMotionUsageDescription": "StepLeague reads your step count in real time so today's total updates live while the app is open."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true
@@ -29,8 +31,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.health.READ_STEPS",
-        "android.permission.ACTIVITY_RECOGNITION"
+        "android.permission.health.READ_STEPS"
       ]
     },
     "web": {
@@ -50,12 +51,29 @@
       [
         "react-native-health-connect",
         {
-          "permissions": ["android.permission.health.READ_STEPS"]
+          "permissions": [
+            "android.permission.health.READ_STEPS"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "47c408a2-8abc-4cd3-ba09-dfee556ae78f"
+      }
+    },
+    "owner": "rej33"
   }
 }
