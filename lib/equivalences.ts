@@ -1,7 +1,20 @@
 // Fun, approximate distance equivalences for the home screen — flavor text,
 // not a fitness claim. Average stride length (0.762m) converts steps to a
 // rough walking distance.
-const METERS_PER_STEP = 0.762;
+export const METERS_PER_STEP = 0.762;
+
+// Same "fun, approximate" spirit as the distance conversion above — rough
+// population averages, not personalized fitness tracking. ~0.04 kcal/step
+// and ~110 steps/minute are commonly cited averages for a moderate walking
+// pace; there's no per-user calibration (stride length, weight, pace) behind
+// either number.
+export const KCAL_PER_STEP = 0.04;
+export const STEPS_PER_MINUTE = 110;
+
+// No per-user daily-goal field exists yet (see the profile screen's static
+// "Daily goal" row) — this is the one default every screen that shows a
+// goal uses until that's added.
+export const DEFAULT_DAILY_GOAL = 10_000;
 
 const UNITS: { meters: number; label: (n: number) => string }[] = [
   { meters: 105, label: (n) => `${n} football pitch${n === 1 ? '' : 'es'}` },

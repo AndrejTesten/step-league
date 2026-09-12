@@ -1,19 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 
-import { Avatar, Card, Heading, Input, Muted, Screen, SearchableSelect, Tabs, Title } from '@/components/ui';
+import { Input, Screen, SectionLabel, Tabs, Title } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
 import { getErrorMessage } from '@/lib/errors';
-import { LEADERBOARD_PAGE_SIZE, getGlobalLeaderboard, searchLeaderboardLocations } from '@/lib/leaderboard';
+import { LEADERBOARD_PAGE_SIZE, getGlobalLeaderboard, getMyLeaderboardRank } from '@/lib/leaderboard';
 import { theme, useThemeColors } from '@/lib/theme';
 import type { GlobalLeaderboardRow, LeaderboardScope } from '@/lib/types';
-
-const SCOPE_OPTIONS: { value: LeaderboardScope; label: string }[] = [
-  { value: 'city', label: 'City' },
-  { value: 'country', label: 'Country' },
-  { value: 'global', label: 'Global' },
-];
 
 function useDebounced(value: string, delay: number): string {
   const [debounced, setDebounced] = useState(value);
@@ -28,37 +22,37 @@ export function LeaderboardsPage({ width }: { width: number }) {
   const colors = useThemeColors();
   const { profile } = useSession();
   const [scope, setScope] = useState<LeaderboardScope>('global');
-  const [cityValue, setCityValue] = useState<string | null>(null);
-  const [countryValue, setCountryValue] = useState<string | null>(null);
-  const [locationOptions, setLocationOptions] = useState<string[]>([]);
-  const [locationLoading, setLocationLoading] = useState(false);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounced(search, 350);
 
   const [rows, setRows] = useState<GlobalLeaderboardRow[]>([]);
+  const [myRank, setMyRank] = useState<{ rank: number; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Default each location picker to the user's own city/country the first
-  // time it becomes known, but never overwrite a location the user already
-  // picked (including picking one back to empty via the dropdown).
-  useEffect(() => {
-    if (cityValue === null && profile?.city) setCityValue(profile.city);
-  }, [profile?.city, cityValue]);
-  useEffect(() => {
-    if (countryValue === null && profile?.country) setCountryValue(profile.country);
-  }, [profile?.country, countryValue]);
-
-  const scopeValue = scope === 'city' ? cityValue : scope === 'country' ? countryValue : null;
+  // City/Country always mean *your* city/country (set in Profile) — no
+  // picker to browse someone else's, on purpose: this tab is "how do I
+  // compare to people near me," not a general location explorer.
+  const scopeValue = scope === 'city' ? (profile?.city ?? null) : scope === 'country' ? (profile?.country ?? null) : null;
   const missingLocation = (scope === 'city' || scope === 'country') && !scopeValue;
+
+  const scopeOptions = useMemo<{ value: LeaderboardScope; label: string }[]>(
+    () => [
+      { value: 'global', label: 'World' },
+      { value: 'country', label: profile?.country ?? 'Country' },
+      { value: 'city', label: profile?.city ?? 'City' },
+    ],
+    [profile?.country, profile?.city]
+  );
 
   const requestId = useRef(0);
 
   const loadFirstPage = useCallback(async () => {
     if (missingLocation) {
       setRows([]);
+      setMyRank(null);
       setHasMore(false);
       setError(null);
       setLoading(false);
@@ -68,9 +62,13 @@ export function LeaderboardsPage({ width }: { width: number }) {
     setLoading(true);
     setError(null);
     try {
-      const page = await getGlobalLeaderboard(scope, scopeValue, { search: debouncedSearch, offset: 0 });
+      const [page, rank] = await Promise.all([
+        getGlobalLeaderboard(scope, scopeValue, { search: debouncedSearch, offset: 0 }),
+        getMyLeaderboardRank(scope, scopeValue).catch(() => null),
+      ]);
       if (myRequest !== requestId.current) return;
       setRows(page);
+      setMyRank(rank);
       setHasMore(page.length === LEADERBOARD_PAGE_SIZE);
     } catch (e) {
       if (myRequest !== requestId.current) return;
@@ -101,54 +99,50 @@ export function LeaderboardsPage({ width }: { width: number }) {
       setRows((prev) => [...prev, ...page]);
       setHasMore(page.length === LEADERBOARD_PAGE_SIZE);
     } catch {
-      // A failed "load more" just stops pagination quietly — the list already shown stays usable.
       setHasMore(false);
     } finally {
       setLoadingMore(false);
     }
   }
 
-  const locationSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function handleLocationQueryChange(query: string) {
-    if (scope !== 'city' && scope !== 'country') return;
-    if (locationSearchTimer.current) clearTimeout(locationSearchTimer.current);
-    setLocationLoading(true);
-    locationSearchTimer.current = setTimeout(async () => {
-      try {
-        setLocationOptions(await searchLeaderboardLocations(scope, query));
-      } catch {
-        setLocationOptions([]);
-      } finally {
-        setLocationLoading(false);
-      }
-    }, 250);
-  }
+  const scopeLabel = scope === 'global' ? 'the world' : scopeValue ?? '';
+  const topPercent = myRank ? Math.max(1, Math.round((myRank.rank / myRank.total) * 100)) : null;
 
   return (
     <Screen style={{ width, paddingTop: theme.space(14) }}>
-      <Title>Leaderboards</Title>
-
-      <View style={{ marginTop: theme.space(5) }}>
-        <Tabs options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
+      <Title>Global</Title>
+      <View style={{ marginTop: theme.space(4) }}>
+        <Tabs options={scopeOptions} value={scope} onChange={setScope} />
       </View>
 
-      <View style={{ marginTop: theme.space(3), gap: theme.space(2) }}>
-        {(scope === 'city' || scope === 'country') && (
-          <SearchableSelect
-            placeholder={scope === 'city' ? 'City' : 'Country'}
-            value={scopeValue ?? ''}
-            options={locationOptions}
-            onSelect={(v) => (scope === 'city' ? setCityValue(v || null) : setCountryValue(v || null))}
-            loading={locationLoading}
-            onQueryChange={handleLocationQueryChange}
-            emptyMessage="No matches yet."
-          />
-        )}
+      <View style={{ marginTop: theme.space(3) }}>
         <Input placeholder="Search by name" value={search} onChangeText={setSearch} />
       </View>
 
+      {myRank && !missingLocation && (
+        <View style={[styles.hero, { backgroundColor: colors.card }]}>
+          <View>
+            <SectionLabel>Your place in {scopeLabel}</SectionLabel>
+            <Text style={[styles.heroValue, { color: colors.accent }]}>{myRank.rank.toLocaleString()}</Text>
+          </View>
+          <Text style={[styles.heroMeta, { color: colors.textMuted }]}>
+            of {myRank.total.toLocaleString()}
+            {'\n'}
+            <Text style={{ color: colors.accent }}>top {topPercent}%</Text>
+          </Text>
+        </View>
+      )}
+
+      <View style={[styles.tableHeader, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.tableHeaderCell, { width: 34, color: colors.textDim }]}>#</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>Walker</Text>
+        <Text style={[styles.tableHeaderCell, { width: 54, color: colors.textDim }]}>City</Text>
+        <Text style={[styles.tableHeaderCell, { width: 64, textAlign: 'right', color: colors.textDim }]}>Steps</Text>
+      </View>
+
       <FlatList
-        style={{ marginTop: theme.space(4) }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: theme.space(6) }}
         data={rows}
         keyExtractor={(r) => r.user_id}
         onEndReached={loadMore}
@@ -158,60 +152,116 @@ export function LeaderboardsPage({ width }: { width: number }) {
         }
         ListEmptyComponent={
           !loading ? (
-            <Card>
-              <Muted style={error ? { color: colors.danger } : undefined}>
+            <View style={{ paddingVertical: theme.space(4) }}>
+              <Text style={{ color: error ? colors.danger : colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>
                 {error
                   ? error
                   : missingLocation
-                    ? `Pick a ${scope} above to see its leaderboard.`
+                    ? `Add your ${scope} in Profile to see this leaderboard.`
                     : 'No one has recorded any steps here yet.'}
-              </Muted>
-            </Card>
+              </Text>
+            </View>
           ) : null
         }
-        renderItem={({ item, index }) => (
-          <View
-            style={[
-              styles.row,
-              { borderTopColor: colors.border, borderTopWidth: index === 0 ? 0 : StyleSheet.hairlineWidth },
-            ]}
-          >
-            <Muted style={styles.rank}>{item.rank}</Muted>
-            <Avatar uri={item.avatar_url} name={item.display_name} size={28} />
-            <Heading
-              style={[styles.name, item.is_me && { color: colors.accent }]}
-              numberOfLines={1}
+        renderItem={({ item }) => {
+          const mine = item.is_me;
+          return (
+            <View
+              style={[
+                styles.row,
+                { borderTopColor: colors.border },
+                mine && styles.rowMine,
+                mine && { backgroundColor: colors.accentWash },
+              ]}
             >
-              {item.display_name}
-              {item.is_me ? ' (you)' : ''}
-            </Heading>
-            <Muted style={styles.steps}>{item.total_steps.toLocaleString()}</Muted>
-          </View>
-        )}
+              <Text style={[styles.rank, { color: mine ? colors.accent : colors.text, fontVariant: ['tabular-nums'] }]}>
+                {item.rank}
+              </Text>
+              <Text style={[styles.name, { color: mine ? colors.accent : colors.text }]} numberOfLines={1}>
+                {mine ? 'You' : item.display_name}
+              </Text>
+              <Text style={[styles.city, { color: colors.textMuted }]} numberOfLines={1}>
+                {item.city ?? '—'}
+              </Text>
+              <Text style={[styles.steps, { color: mine ? colors.accent : colors.text, fontVariant: ['tabular-nums'] }]}>
+                {item.total_steps.toLocaleString()}
+              </Text>
+            </View>
+          );
+        }}
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  hero: {
+    marginTop: theme.space(4),
+    borderRadius: theme.radius.lg,
+    padding: theme.space(4),
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  heroValue: {
+    fontSize: 48,
+    lineHeight: 44,
+    marginTop: theme.space(2),
+    fontFamily: theme.fontFamily.heading,
+    fontVariant: ['tabular-nums'],
+  },
+  heroMeta: {
+    fontSize: 11,
+    lineHeight: 17,
+    fontFamily: theme.fontFamily.bodyMedium,
+    textAlign: 'right',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    marginTop: theme.space(4),
+    paddingHorizontal: theme.space(1.5),
+    paddingBottom: theme.space(2.25),
+    borderBottomWidth: theme.border,
+  },
+  tableHeaderCell: {
+    fontSize: 9,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.space(3),
-    paddingVertical: theme.space(2.5),
+    paddingHorizontal: theme.space(1.5),
+    paddingVertical: theme.space(2.75),
+    borderTopWidth: theme.border,
+  },
+  rowMine: {
+    borderTopWidth: 0,
+    borderRadius: theme.radius.md,
+    marginHorizontal: -theme.space(2),
+    paddingHorizontal: theme.space(3.5),
   },
   rank: {
-    width: 24,
-    fontSize: theme.font.small,
-    fontVariant: ['tabular-nums'],
+    width: 34,
+    fontSize: 16,
+    fontFamily: theme.fontFamily.heading,
   },
   name: {
     flex: 1,
-    fontSize: theme.font.body,
-    fontWeight: '600',
+    fontSize: 13,
+    fontFamily: theme.fontFamily.bodyMedium,
+    paddingRight: theme.space(2),
+  },
+  city: {
+    width: 54,
+    fontSize: 10,
+    fontFamily: theme.fontFamily.bodyMedium,
   },
   steps: {
-    fontSize: theme.font.small,
-    fontVariant: ['tabular-nums'],
+    width: 64,
+    textAlign: 'right',
+    fontSize: 15,
+    fontFamily: theme.fontFamily.heading,
   },
 });

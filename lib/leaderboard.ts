@@ -33,12 +33,16 @@ export async function getGlobalLeaderboard(
   }));
 }
 
-/** Cities/countries that at least one profile has set, for the location picker above the leaderboard. */
-export async function searchLeaderboardLocations(
-  scope: 'city' | 'country',
-  query: string
-): Promise<string[]> {
-  const { data, error } = await supabase.rpc('search_locations', { p_scope: scope, p_query: query });
+/** "Your place in Poland: 4,182 of 91,203" hero stat — see get_leaderboard_rank_summary() in supabase/schema.sql. */
+export async function getMyLeaderboardRank(
+  scope: LeaderboardScope,
+  value: string | null
+): Promise<{ rank: number; total: number } | null> {
+  const { data, error } = await supabase
+    .rpc('get_leaderboard_rank_summary', { p_scope: scope, p_value: scope === 'global' ? null : value })
+    .single();
   if (error) throw error;
-  return ((data ?? []) as { value: string }[]).map((r) => r.value);
+  const row = data as { my_rank: number | null; total: number } | null;
+  if (!row || row.my_rank == null) return null;
+  return { rank: row.my_rank, total: row.total };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Muted, SearchableSelect, Screen, Title } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
@@ -15,6 +16,7 @@ import { theme, useThemeColors } from '@/lib/theme';
 // sense once you know which country's cities to show.
 export default function OnboardingLocation() {
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const { session, refreshProfile } = useSession();
   const [countries, setCountries] = useState<string[]>([]);
   const [countriesLoading, setCountriesLoading] = useState(true);
@@ -96,7 +98,9 @@ export default function OnboardingLocation() {
 
       <View style={{ flex: 1 }} />
 
-      <Button label="Continue" onPress={handleSave} loading={saving} disabled={!country || !city} />
+      <View style={{ paddingBottom: insets.bottom }}>
+        <Button label="Continue" onPress={handleSave} loading={saving} disabled={!country || !city} />
+      </View>
     </Screen>
   );
 }

@@ -1,12 +1,20 @@
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
 import { supabase } from './supabase';
 
+// The largest size an avatar is ever displayed at in this app (profile
+// header) is well under this, even at 3x pixel density — capping here keeps
+// a full-resolution phone-camera photo (often 10+ MB) from turning into a
+// multi-megabyte download for every other member of every league this
+// person is in, every time their avatar renders.
+const AVATAR_MAX_DIMENSION = 512;
+
 /**
- * Opens the photo library, uploads the chosen image to the `avatars`
- * storage bucket at avatars/<user_id>/avatar.<ext>, and writes the public
- * URL onto the user's profile. Returns null if the user cancelled picking
- * (not an error) or the returned URL on success.
+ * Opens the photo library, downscales/compresses the chosen image, uploads
+ * it to the `avatars` storage bucket at avatars/<user_id>/avatar.jpg, and
+ * writes the public URL onto the user's profile. Returns null if the user
+ * cancelled picking (not an error) or the returned URL on success.
  */
 export async function pickAndUploadAvatar(userId: string): Promise<string | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -23,19 +31,22 @@ export async function pickAndUploadAvatar(userId: string): Promise<string | null
   if (result.canceled || !result.assets[0]) return null;
 
   const asset = result.assets[0];
-  // Don't derive the extension from asset.uri — on web it's a `blob:` URL
-  // with no file extension at all (e.g. "blob:http://host/<uuid>"), and
-  // naively splitting on "." there corrupts the storage path. mimeType is
-  // reliable on every platform since expo-image-picker always sets it.
-  const ext = asset.mimeType?.split('/')[1] ?? 'jpg';
-  const path = `${userId}/avatar.${ext}`;
+  const resized = await manipulateAsync(asset.uri, [{ resize: { width: AVATAR_MAX_DIMENSION, height: AVATAR_MAX_DIMENSION } }], {
+    compress: 0.8,
+    format: SaveFormat.JPEG,
+  });
 
-  const response = await fetch(asset.uri);
+  // Always .jpg now — manipulateAsync's JPEG output format is consistent
+  // across platforms, unlike the original picked asset's mimeType (which on
+  // web is a `blob:` URL with no reliable extension of its own).
+  const path = `${userId}/avatar.jpg`;
+
+  const response = await fetch(resized.uri);
   const blob = await response.blob();
 
   const { error: uploadError } = await supabase.storage
     .from('avatars')
-    .upload(path, blob, { upsert: true, contentType: asset.mimeType ?? `image/${ext}` });
+    .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
   if (uploadError) throw uploadError;
 
   const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);

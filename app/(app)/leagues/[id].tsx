@@ -1,29 +1,36 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { FlatList, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CountdownBadge } from '@/components/CountdownBadge';
 import { DatePickerField } from '@/components/DatePickerField';
 import { LeagueScoreChart } from '@/components/LeagueScoreChart';
-import { Avatar, Button, Card, Heading, Muted, Screen, Sheet, SheetOption, Tabs, Title } from '@/components/ui';
+import { Avatar, Button, Input, Screen, SectionLabel, Sheet, SheetOption, Tabs } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
 import { getErrorMessage } from '@/lib/errors';
+import { dateKeyInTimezone } from '@/lib/steps-shared';
 import {
   getLeaderboard,
   getLeagueAwards,
   getLeagueHistory,
+  getLeagueMessages,
   getLeagueScoreSeries,
   getMyNemesis,
   getReactionEmojis,
+  leaveLeague,
   listMyLeagues,
   reactToMember,
   restartLeague,
+  sendLeagueMessage,
   setMyNemesis,
 } from '@/lib/leagues';
 import type { LeagueScoreSeries } from '@/lib/leagues';
+import { supabase } from '@/lib/supabase';
 import { theme, useThemeColors } from '@/lib/theme';
 import { toDateKey } from '@/lib/timezone';
-import type { LeaderboardRow, League, LeagueAward, LeagueRoundResult } from '@/lib/types';
+import { useCountdownClock } from '@/lib/use-countdown-clock';
+import type { LeaderboardRow, League, LeagueAward, LeagueMessage, LeagueRoundResult } from '@/lib/types';
 
 function isLeagueEnded(league: League | null): boolean {
   if (!league) return false;
@@ -43,8 +50,11 @@ const VIEW_OPTIONS: { value: 'list' | 'graph'; label: string }[] = [
 
 export default function LeagueDetail() {
   const colors = useThemeColors();
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session, profile } = useSession();
+  const clock = useCountdownClock(profile?.timezone);
+  const insets = useSafeAreaInsets();
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [league, setLeague] = useState<League | null>(null);
   const [officialAsOf, setOfficialAsOf] = useState<string | null>(null);
@@ -62,7 +72,18 @@ export default function LeagueDetail() {
   const [newDeadline, setNewDeadline] = useState(defaultNewDeadline);
   const [restartLoading, setRestartLoading] = useState(false);
   const [restartError, setRestartError] = useState<string | null>(null);
+  const [restartWinnerStakes, setRestartWinnerStakes] = useState('');
+  const [restartLoserStakes, setRestartLoserStakes] = useState('');
+  const [restartMemberIds, setRestartMemberIds] = useState<Set<string>>(new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [exitSheetOpen, setExitSheetOpen] = useState(false);
+  const [exiting, setExiting] = useState(false);
+  const [exitError, setExitError] = useState<string | null>(null);
+
+  const [messages, setMessages] = useState<LeagueMessage[]>([]);
+  const [messageDraft, setMessageDraft] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -111,19 +132,75 @@ export default function LeagueDetail() {
       .finally(() => setScoreLoading(false));
   }, [view, id]);
 
+  // Chat: initial load + focus refresh, plus a Realtime subscription for new
+  // messages so the composer feels live without polling.
+  useEffect(() => {
+    if (!id) return;
+    getLeagueMessages(id)
+      .then(setMessages)
+      .catch(() => {});
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const channel = supabase
+      .channel(`messages:${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `league_id=eq.${id}` },
+        () => {
+          getLeagueMessages(id)
+            .then(setMessages)
+            .catch(() => {});
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
+
+  // The 22:00 results takeover: shown once per league per day, the first
+  // time the user opens a league whose standings just locked in for today.
+  // "Just landed" means officialAsOf is today in the member's own timezone
+  // — otherwise every league visit on an old snapshot would pop it.
+  useEffect(() => {
+    if (!id || !league || !officialAsOf || isLeagueEnded(league) || !profile?.timezone) return;
+    const today = dateKeyInTimezone(new Date(), profile.timezone);
+    if (officialAsOf !== today) return;
+    const storageKey = `stepleague:results-seen:${id}`;
+    let cancelled = false;
+    AsyncStorage.getItem(storageKey).then((seen) => {
+      if (cancelled || seen === officialAsOf) return;
+      AsyncStorage.setItem(storageKey, officialAsOf).catch(() => {});
+      router.push({ pathname: '/leagues/results', params: { id, date: officialAsOf, name: league.name } });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, league, officialAsOf, profile?.timezone, router]);
+
+  async function handleSendMessage() {
+    if (!id || !messageDraft.trim()) return;
+    const body = messageDraft.trim();
+    setMessageDraft('');
+    setSendingMessage(true);
+    try {
+      await sendLeagueMessage(id, body);
+      setMessages(await getLeagueMessages(id));
+    } catch {
+      setMessageDraft(body);
+    } finally {
+      setSendingMessage(false);
+    }
+  }
+
   const ended = isLeagueEnded(league);
   const isCreator = !!session && league?.created_by === session.user.id;
 
-  const underdog = !ended
-    ? rows.reduce<LeaderboardRow | null>(
-        (best, r) => (r.deltaSinceYesterday > (best?.deltaSinceYesterday ?? 0) ? r : best),
-        null
-      )
-    : null;
-
   const myRow = rows.find((r) => r.is_me);
   const nemesisRow = rows.find((r) => r.user_id === nemesisId);
-  const leaderTotal = rows[0]?.total_steps ?? 0;
+  const winner = rows[0];
 
   async function handleInvite() {
     if (!league) return;
@@ -134,12 +211,32 @@ export default function LeagueDetail() {
     });
   }
 
+  function handleStartRestart() {
+    setRestartMemberIds(new Set(rows.map((r) => r.user_id)));
+    setRestartWinnerStakes(league?.winner_stakes ?? '');
+    setRestartLoserStakes(league?.loser_stakes ?? '');
+    setRestarting(true);
+  }
+
+  function toggleRestartMember(userId: string) {
+    setRestartMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }
+
   async function handleConfirmRestart() {
     if (!id) return;
     setRestartError(null);
     setRestartLoading(true);
     try {
-      await restartLeague(id, toDateKey(newDeadline));
+      await restartLeague(id, toDateKey(newDeadline), {
+        memberIds: Array.from(restartMemberIds),
+        winnerStakes: restartWinnerStakes,
+        loserStakes: restartLoserStakes,
+      });
       setRestarting(false);
       await load();
     } catch (e) {
@@ -149,239 +246,407 @@ export default function LeagueDetail() {
     }
   }
 
+  async function handleExitLeague() {
+    if (!id) return;
+    setExitError(null);
+    setExiting(true);
+    try {
+      await leaveLeague(id);
+      setExitSheetOpen(false);
+      router.replace('/');
+    } catch (e) {
+      setExitError(getErrorMessage(e, 'Could not leave this league.'));
+    } finally {
+      setExiting(false);
+    }
+  }
+
   return (
     <Screen>
-      <View
-        style={{
-          paddingTop: theme.space(4),
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-        }}
-      >
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space(2) }}>
-            <Heading>{league?.name ?? '...'}</Heading>
-            {league && league.round_number > 1 && (
-              <View style={[styles.roundBadge, { backgroundColor: colors.card }]}>
-                <Text style={[styles.roundBadgeText, { color: colors.textMuted }]}>Round {league.round_number}</Text>
-              </View>
-            )}
-          </View>
-          <Muted style={{ marginTop: theme.space(1) }}>
-            {ended
-              ? 'Final standings'
-              : officialAsOf
-                ? `Standings as of last night, plus today's live steps`
-                : `Live steps — standings lock in after the first 22:00 update`}
-          </Muted>
+      <View style={styles.header}>
+        <View style={{ flex: 1, gap: theme.space(1.5) }}>
+          <Text style={[styles.leagueName, { color: colors.text }]}>{league?.name ?? '…'}</Text>
+          <Text style={[styles.leagueMeta, { color: colors.textMuted }]}>
+            {rows.length} members · {ended ? 'finished' : `ends ${league ? new Date(league.deadline).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : ''}`}
+            {league ? ` · ${league.scoring_mode === 'daily_wins' ? 'daily wins' : 'total steps'}` : ''}
+          </Text>
         </View>
-        {profile && !ended && <CountdownBadge timezone={profile.timezone} />}
+        {!ended && (
+          <View style={{ flexDirection: 'row', gap: theme.space(2) }}>
+            <Pressable
+              onPress={() =>
+                id &&
+                router.push({ pathname: '/leagues/peek', params: { id, name: league?.name ?? '' } })
+              }
+              style={({ pressed }) => [styles.inviteButton, { borderColor: pressed ? colors.accent : colors.controlBorder }]}
+            >
+              <Text style={{ fontSize: 10, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textMuted }}>
+                Peek
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={handleInvite}
+              style={({ pressed }) => [styles.inviteButton, { borderColor: pressed ? colors.accent : colors.controlBorder }]}
+            >
+              <Text style={{ fontSize: 10, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textMuted }}>
+                Invite
+              </Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
-      {loadError && (
-        <Card style={{ marginTop: theme.space(4), borderColor: colors.danger }}>
-          <Muted style={{ color: colors.danger }}>{loadError}</Muted>
-        </Card>
+      {(league?.winner_stakes || league?.loser_stakes) && (
+        <View style={[styles.stakesCard, { backgroundColor: colors.card, borderColor: colors.borderStrong }]}>
+          {league?.winner_stakes && (
+            <Text style={{ fontSize: 12.5, lineHeight: 18, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>
+              <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, color: colors.accent }}>Winner gets: </Text>
+              {league.winner_stakes}
+            </Text>
+          )}
+          {league?.loser_stakes && (
+            <Text
+              style={{
+                marginTop: league?.winner_stakes ? theme.space(1.5) : 0,
+                fontSize: 12.5,
+                lineHeight: 18,
+                fontFamily: theme.fontFamily.bodyMedium,
+                color: colors.text,
+              }}
+            >
+              <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, color: colors.textMuted }}>Loser has to: </Text>
+              {league.loser_stakes}
+            </Text>
+          )}
+        </View>
       )}
 
-      <View style={{ marginTop: theme.space(4) }}>
+      {!ended && (
+        <View style={[styles.countdownCard, { backgroundColor: colors.card, marginBottom: theme.space(4) }]}>
+          <View>
+            <SectionLabel>
+              {officialAsOf
+                ? `Showing ${new Date(officialAsOf).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}`
+                : 'Live steps'}
+            </SectionLabel>
+            <Text style={[styles.countdownCaption, { color: colors.textDim }]}>Today unlocks at 22:00</Text>
+          </View>
+          <Text style={[styles.countdownClock, { color: colors.accent }]}>{clock}</Text>
+        </View>
+      )}
+
+      {loadError && (
+        <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, marginBottom: theme.space(3) }}>
+          {loadError}
+        </Text>
+      )}
+
+      <View style={{ marginBottom: theme.space(3) }}>
         <Tabs options={VIEW_OPTIONS} value={view} onChange={setView} />
       </View>
 
       {view === 'graph' ? (
-        <View style={{ marginTop: theme.space(5) }}>
+        <View style={{ paddingBottom: insets.bottom }}>
           {scoreLoading || !scoreSeries ? (
-            <Muted>Loading graph…</Muted>
+            <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>Loading graph…</Text>
           ) : (
-            <Card>
-              <Heading style={{ fontSize: theme.font.body, marginBottom: theme.space(2) }}>League score</Heading>
+            <View style={[styles.card, { backgroundColor: colors.card }]}>
+              <Text style={{ fontFamily: theme.fontFamily.heading, fontSize: theme.font.heading, color: colors.text, marginBottom: theme.space(2), textTransform: 'uppercase' }}>
+                League score
+              </Text>
               <LeagueScoreChart series={scoreSeries} />
-            </Card>
+            </View>
           )}
         </View>
       ) : (
         <FlatList
-          style={{ marginTop: theme.space(4) }}
+          style={{ flex: 1 }}
           data={rows}
           keyExtractor={(r) => r.user_id}
-          ItemSeparatorComponent={() => <View style={{ height: theme.space(2) }} />}
           ListHeaderComponent={
-            <View style={{ gap: theme.space(3), marginBottom: theme.space(3) }}>
-              {ended && (
-                <View style={{ gap: theme.space(2) }}>
-                  <Title style={{ fontSize: theme.font.heading }}>Round {league?.round_number ?? 1} ended</Title>
-                  {awards === null ? (
-                    <Muted>Loading awards…</Muted>
-                  ) : awards.length === 0 ? (
-                    <Muted>Not enough data for awards this time.</Muted>
-                  ) : (
-                    awards.map((a) => (
-                      <Card key={a.title}>
-                        <Heading style={{ fontSize: theme.font.body }}>{a.title}</Heading>
-                        <Muted style={{ marginTop: 2 }}>
-                          {a.description} · {a.winnerName}
-                        </Muted>
-                      </Card>
-                    ))
-                  )}
-
-                  {isCreator ? (
-                    <Card style={{ gap: theme.space(3) }}>
-                      <Heading style={{ fontSize: theme.font.body }}>Ready for another round?</Heading>
-                      {!restarting ? (
-                        <Button label="Start again" onPress={() => setRestarting(true)} />
-                      ) : (
-                        <>
-                          <Muted>New end date</Muted>
-                          <DatePickerField
-                            value={newDeadline}
-                            onChange={setNewDeadline}
-                            minimumDate={new Date()}
-                          />
-                          {restartError && <Muted style={{ color: colors.danger }}>{restartError}</Muted>}
-                          <View style={{ flexDirection: 'row', gap: theme.space(3) }}>
-                            <View style={{ flex: 1 }}>
-                              <Button
-                                label="Cancel"
-                                variant="secondary"
-                                onPress={() => setRestarting(false)}
-                              />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Button
-                                label="Confirm"
-                                onPress={handleConfirmRestart}
-                                loading={restartLoading}
-                              />
-                            </View>
-                          </View>
-                        </>
-                      )}
-                    </Card>
-                  ) : (
-                    <Card>
-                      <Muted>Waiting for the league owner to start a new round.</Muted>
-                    </Card>
+            <View>
+              {ended ? (
+                <View>
+                  {winner && (
+                    <View style={[styles.finalPanel, { backgroundColor: colors.accent }]}>
+                      <Text style={styles.finalEyebrow}>Final standings · winner</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: theme.space(3), marginTop: theme.space(2.5) }}>
+                        <Text style={styles.finalWinnerName}>{winner.display_name}</Text>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={styles.finalWinnerSteps}>{winner.total_steps.toLocaleString()}</Text>
+                          <Text style={styles.finalWinnerMeta}>
+                            {winner.points} daily win{winner.points === 1 ? '' : 's'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   )}
                 </View>
+              ) : (
+                rows.length > 1 && (
+                  <Text style={{ fontSize: 11, color: colors.textDim, fontFamily: theme.fontFamily.bodyMedium, marginBottom: theme.space(2) }}>
+                    Hold a name to react to it
+                  </Text>
+                )
               )}
 
-              {!ended && underdog && underdog.deltaSinceYesterday > 0 && (
-                <Card style={[styles.accentCard, { borderColor: colors.accent }]}>
-                  <Muted style={styles.caption}>TODAY'S MOVER</Muted>
-                  <Heading style={{ fontSize: theme.font.body, marginTop: 2 }}>
-                    {underdog.display_name}
-                    <Muted> +{underdog.deltaSinceYesterday.toLocaleString()} vs yesterday</Muted>
-                  </Heading>
-                </Card>
-              )}
-
-              {!ended && myRow && (
-                <Pressable onPress={() => setNemesisSheetOpen(true)}>
-                  <Card>
-                    <Muted style={styles.caption}>RIVAL</Muted>
-                    {nemesisRow ? (
-                      <Heading style={{ fontSize: theme.font.body, marginTop: 2 }}>
-                        {nemesisRow.display_name}
-                        <Muted>
-                          {' '}
-                          · {Math.abs(myRow.total_steps - nemesisRow.total_steps).toLocaleString()} steps{' '}
-                          {myRow.total_steps >= nemesisRow.total_steps ? 'ahead' : 'behind'}
-                        </Muted>
-                      </Heading>
-                    ) : (
-                      <Muted style={{ marginTop: 2 }}>Tap to pick a rival to track head-to-head.</Muted>
-                    )}
-                  </Card>
-                </Pressable>
-              )}
-
-              {!ended && rows.length > 1 && <Muted style={styles.hint}>Hold a name to react to it</Muted>}
+              <View style={[styles.tableHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.tableHeaderCell, { width: 26, color: colors.textDim }]}>#</Text>
+                <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>Member</Text>
+                <Text style={[styles.tableHeaderCell, { width: 70, textAlign: 'right', color: colors.textDim }]}>Steps</Text>
+                <Text style={[styles.tableHeaderCell, { width: 40, textAlign: 'right', color: colors.textDim }]}>Pts</Text>
+              </View>
             </View>
           }
           ListEmptyComponent={
             !loading ? (
-              <Card>
-                <Muted>No steps recorded yet — open the app on your phone with Health access granted.</Muted>
-              </Card>
+              <Text style={{ paddingVertical: theme.space(4), color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>
+                No steps recorded yet — open the app on your phone with Health access granted.
+              </Text>
             ) : null
           }
           renderItem={({ item }) => {
-            const progress = leaderTotal > 0 ? Math.min(100, (item.total_steps / leaderTotal) * 100) : 0;
+            const mine = item.is_me;
             return (
               <Pressable
-                disabled={ended || item.is_me}
+                disabled={ended || mine}
                 delayLongPress={450}
                 onLongPress={() => setReactionTarget({ userId: item.user_id, name: item.display_name })}
               >
-                <Card
-                  style={{
-                    borderColor: item.is_me ? colors.accent : colors.border,
-                    borderWidth: item.is_me ? 1.5 : StyleSheet.hairlineWidth,
-                  }}
+                <View
+                  style={[
+                    styles.memberRow,
+                    { borderTopColor: colors.border },
+                    mine && styles.memberRowMine,
+                    mine && { backgroundColor: colors.accentWash },
+                  ]}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space(3), flex: 1 }}>
-                      <Muted style={styles.rank}>{item.rank}</Muted>
-                      <Avatar uri={item.avatar_url} name={item.display_name} size={32} />
-                      <Heading style={{ fontSize: theme.font.body, flexShrink: 1 }}>
-                        {item.display_name}
-                        {item.is_me ? ' (you)' : ''}
-                      </Heading>
-                    </View>
-                    <Heading style={{ fontSize: theme.font.body }}>{item.total_steps.toLocaleString()}</Heading>
+                  <Text style={[styles.rank, { color: mine ? colors.accent : colors.text }]}>{item.rank}</Text>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.space(2.5) }}>
+                    <Avatar name={item.display_name} uri={item.avatar_url} size={26} variant={mine ? 'accent' : 'default'} />
+                    <Text style={[styles.memberName, { color: mine ? colors.accent : colors.text }]} numberOfLines={1}>
+                      {mine ? 'You' : item.display_name}
+                    </Text>
                   </View>
-
-                  <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-                    <View style={[styles.progressFill, { backgroundColor: colors.accent, width: `${progress}%` }]} />
+                  <Text style={[styles.stepsCell, { color: mine ? colors.accent : colors.text }]}>
+                    {item.total_steps.toLocaleString()}
+                  </Text>
+                  <Text style={[styles.ptsCell, { color: mine ? colors.accent : colors.text }]}>{item.points}</Text>
+                </View>
+                {item.reactions.length > 0 && (
+                  <View style={[styles.reactionRow, mine && { paddingHorizontal: theme.space(3.5) }]}>
+                    {item.reactions.map((r) => (
+                      <View key={r.emoji} style={[styles.reactionPill, { backgroundColor: colors.card }]}>
+                        <Text style={{ fontSize: 12 }}>
+                          {r.emoji} {r.count}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
-
-                  {item.reactions.length > 0 && (
-                    <View style={styles.reactionRow}>
-                      {item.reactions.map((r) => (
-                        <View key={r.emoji} style={[styles.reactionPill, { backgroundColor: colors.card }]}>
-                          <Text style={[styles.reactionPillText, { color: colors.text }]}>
-                            {r.emoji} {r.count}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </Card>
+                )}
               </Pressable>
             );
           }}
           ListFooterComponent={
-            history.length > 0 ? (
-              <View style={{ marginTop: theme.space(5), gap: theme.space(2) }}>
-                <Heading style={{ fontSize: theme.font.body }}>Past rounds</Heading>
-                {history.map((round) => (
-                  <Card key={round.round_number}>
-                    <Muted>
-                      Round {round.round_number} · {new Date(round.start_date).toLocaleDateString()} –{' '}
-                      {new Date(round.end_date).toLocaleDateString()}
-                    </Muted>
-                    {round.standings[0] && (
-                      <Heading style={{ fontSize: theme.font.body, marginTop: theme.space(1) }}>
-                        {round.standings[0].display_name} — {round.standings[0].total_steps.toLocaleString()} steps
-                      </Heading>
-                    )}
-                  </Card>
-                ))}
+            <View>
+              {ended && awards && awards.length > 0 && (
+                <View style={styles.awardRow}>
+                  {awards.map((a) => (
+                    <View key={a.title} style={[styles.awardCell, { backgroundColor: colors.card }]}>
+                      <SectionLabel>{a.title}</SectionLabel>
+                      <Text style={{ marginTop: theme.space(2), fontFamily: theme.fontFamily.heading, fontSize: 17, color: colors.text }}>
+                        {a.winnerName}
+                      </Text>
+                      <Text style={{ marginTop: 2, fontSize: 11, color: colors.textMuted, fontFamily: theme.fontFamily.bodyMedium }}>
+                        {a.description}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {ended && (
+                <View style={{ paddingTop: theme.space(4), gap: theme.space(3) }}>
+                  {isCreator ? (
+                    !restarting ? (
+                      <Button label="Rematch — new league" onPress={handleStartRestart} arrow />
+                    ) : (
+                      <View style={{ gap: theme.space(3) }}>
+                        <SectionLabel>New end date</SectionLabel>
+                        <DatePickerField value={newDeadline} onChange={setNewDeadline} minimumDate={new Date()} />
+
+                        <SectionLabel style={{ marginTop: theme.space(2) }}>Stakes (optional)</SectionLabel>
+                        <Input
+                          placeholder="Winner gets… e.g. picks the next restaurant"
+                          value={restartWinnerStakes}
+                          onChangeText={setRestartWinnerStakes}
+                          maxLength={140}
+                        />
+                        <Input
+                          placeholder="Loser has to… e.g. buys coffee for a week"
+                          value={restartLoserStakes}
+                          onChangeText={setRestartLoserStakes}
+                          maxLength={140}
+                        />
+
+                        <SectionLabel style={{ marginTop: theme.space(2) }}>Who's playing this round</SectionLabel>
+                        <View style={{ gap: theme.space(2) }}>
+                          {rows.map((r) => {
+                            const checked = restartMemberIds.has(r.user_id);
+                            const isSelf = r.user_id === session?.user.id;
+                            return (
+                              <Pressable
+                                key={r.user_id}
+                                onPress={() => !isSelf && toggleRestartMember(r.user_id)}
+                                disabled={isSelf}
+                                style={styles.restartMemberRow}
+                              >
+                                <View
+                                  style={[
+                                    styles.restartCheckbox,
+                                    { borderColor: colors.controlBorder },
+                                    (checked || isSelf) && { backgroundColor: colors.accent, borderColor: colors.accent },
+                                  ]}
+                                >
+                                  {(checked || isSelf) && <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodyBold, color: colors.primaryText }}>✓</Text>}
+                                </View>
+                                <Avatar name={r.display_name} uri={r.avatar_url} size={26} />
+                                <Text style={{ flex: 1, fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>
+                                  {isSelf ? 'You' : r.display_name}
+                                  {isSelf ? ' (always in)' : ''}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+
+                        {restartError && (
+                          <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium }}>{restartError}</Text>
+                        )}
+                        <View style={{ flexDirection: 'row', gap: theme.space(3) }}>
+                          <View style={{ flex: 1 }}>
+                            <Button label="Cancel" variant="secondary" onPress={() => setRestarting(false)} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Button label="Confirm" onPress={handleConfirmRestart} loading={restartLoading} />
+                          </View>
+                        </View>
+                      </View>
+                    )
+                  ) : (
+                    <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>
+                      Waiting for the league owner to start a new round.
+                    </Text>
+                  )}
+                  <Button
+                    label="Share final table"
+                    variant="secondary"
+                    onPress={() => id && router.push({ pathname: '/leagues/share', params: { id } })}
+                  />
+                </View>
+              )}
+
+              {!ended && myRow && (
+                <Pressable onPress={() => setNemesisSheetOpen(true)} style={[styles.rivalRow, { backgroundColor: colors.card }]}>
+                  <SectionLabel>Rival</SectionLabel>
+                  {nemesisRow ? (
+                    <Text style={{ marginTop: theme.space(1.5), fontFamily: theme.fontFamily.heading, fontSize: 17, color: colors.text }}>
+                      {nemesisRow.display_name}
+                      <Text style={{ fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>
+                        {' '}
+                        · {Math.abs(myRow.total_steps - nemesisRow.total_steps).toLocaleString()} steps{' '}
+                        {myRow.total_steps >= nemesisRow.total_steps ? 'ahead' : 'behind'}
+                      </Text>
+                    </Text>
+                  ) : (
+                    <Text style={{ marginTop: theme.space(1.5), color: colors.textMuted, fontFamily: theme.fontFamily.bodyMedium }}>
+                      Tap to pick a rival to track head-to-head.
+                    </Text>
+                  )}
+                </Pressable>
+              )}
+
+              {history.length > 0 && (
+                <View style={{ paddingTop: theme.space(4), gap: theme.space(2.5) }}>
+                  <Text style={{ fontFamily: theme.fontFamily.heading, fontSize: theme.font.heading, color: colors.text, textTransform: 'uppercase' }}>
+                    Past rounds
+                  </Text>
+                  {history.map((round) => (
+                    <View key={round.round_number} style={[styles.pastRound, { backgroundColor: colors.card }]}>
+                      <Text style={{ fontSize: 11, color: colors.textMuted, fontFamily: theme.fontFamily.bodyMedium }}>
+                        Round {round.round_number} · {new Date(round.start_date).toLocaleDateString()} –{' '}
+                        {new Date(round.end_date).toLocaleDateString()}
+                      </Text>
+                      {round.standings[0] && (
+                        <Text style={{ marginTop: theme.space(1), fontFamily: theme.fontFamily.heading, fontSize: 17, color: colors.text }}>
+                          {round.standings[0].display_name} — {round.standings[0].total_steps.toLocaleString()} steps
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View style={{ paddingTop: theme.space(5), paddingBottom: theme.space(2) }}>
+                <SectionLabel>League chat</SectionLabel>
               </View>
-            ) : null
+              <View style={{ gap: theme.space(3), paddingBottom: theme.space(3) }}>
+                {messages.length === 0 ? (
+                  <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small }}>
+                    No messages yet — say hi.
+                  </Text>
+                ) : (
+                  messages.map((m) => (
+                    <View key={m.id} style={{ flexDirection: 'row', gap: theme.space(2.75) }}>
+                      <Avatar name={m.display_name} uri={m.avatar_url} size={26} variant={m.is_me ? 'accent' : 'default'} />
+                      <View style={{ flex: 1 }}>
+                        <Text>
+                          <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, fontSize: 12, color: colors.text }}>
+                            {m.is_me ? 'You' : m.display_name}{' '}
+                          </Text>
+                          <Text style={{ fontFamily: theme.fontFamily.bodyMedium, fontSize: 11, color: colors.textDim }}>
+                            {new Date(m.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        </Text>
+                        <Text style={{ marginTop: 3, fontSize: 13, fontFamily: theme.fontFamily.bodyMedium, color: colors.textSubtle }}>
+                          {m.body}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              {!isCreator && (
+                <Pressable onPress={() => setExitSheetOpen(true)} hitSlop={8} style={{ paddingVertical: theme.space(3), alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: colors.textMuted }}>
+                    Exit league
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           }
         />
       )}
 
-      {!ended && (
-        <Button
-          label={`Invite friends · code ${league?.invite_code ?? ''}`}
-          variant="secondary"
-          onPress={handleInvite}
-          style={{ marginTop: theme.space(4) }}
-        />
+      {view === 'list' && (
+        <View style={[styles.composer, { borderTopColor: colors.borderStrong, paddingBottom: insets.bottom + theme.space(2) }]}>
+          <TextInput
+            value={messageDraft}
+            onChangeText={setMessageDraft}
+            placeholder="Say something…"
+            placeholderTextColor={colors.textDim}
+            style={[styles.composerInput, { backgroundColor: colors.card, color: colors.text }]}
+            onSubmitEditing={handleSendMessage}
+          />
+          <Pressable
+            onPress={handleSendMessage}
+            disabled={sendingMessage || !messageDraft.trim()}
+            style={[styles.sendButton, { backgroundColor: colors.accent, opacity: sendingMessage || !messageDraft.trim() ? 0.5 : 1 }]}
+          >
+            <Text style={styles.sendButtonText}>Send</Text>
+          </Pressable>
+        </View>
       )}
 
       <Sheet visible={nemesisSheetOpen} onClose={() => setNemesisSheetOpen(false)} title="Pick a rival">
@@ -426,60 +691,233 @@ export default function LeagueDetail() {
           ))}
         </View>
       </Sheet>
+
+      <Sheet visible={exitSheetOpen} onClose={() => setExitSheetOpen(false)} title="Exit this league?">
+        <View style={{ gap: theme.space(3.5) }}>
+          <Text style={{ fontSize: 14, lineHeight: 20, fontFamily: theme.fontFamily.bodyMedium, color: colors.textSubtle }}>
+            You'll lose your spot in {league?.name ?? 'this league'} — you'd need a new invite to rejoin. Your past
+            standings stay in its history either way.
+          </Text>
+          {exitError && (
+            <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small }}>{exitError}</Text>
+          )}
+          <View style={{ flexDirection: 'row', gap: theme.space(3) }}>
+            <View style={{ flex: 1 }}>
+              <Button label="Stay" variant="secondary" onPress={() => setExitSheetOpen(false)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Exit league" variant="danger" onPress={handleExitLeague} loading={exiting} />
+            </View>
+          </View>
+        </View>
+      </Sheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  rank: {
-    width: 24,
-    fontSize: theme.font.small,
+  header: {
+    paddingTop: theme.space(3),
+    paddingBottom: theme.space(3.5),
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.space(3),
+  },
+  leagueName: {
+    fontSize: 28,
+    fontFamily: theme.fontFamily.heading,
+    textTransform: 'uppercase',
+  },
+  leagueMeta: {
+    fontSize: 11,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  inviteButton: {
+    borderWidth: theme.border,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.space(3),
+    paddingVertical: theme.space(2),
+  },
+  countdownCard: {
+    borderRadius: theme.radius.md,
+    padding: theme.space(3.5),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.space(3),
+  },
+  stakesCard: {
+    borderWidth: theme.border,
+    borderRadius: theme.radius.md,
+    padding: theme.space(3.5),
+    marginBottom: theme.space(4),
+  },
+  countdownCaption: {
+    fontSize: 11,
+    fontFamily: theme.fontFamily.bodyMedium,
+    marginTop: theme.space(1.75),
+  },
+  countdownClock: {
+    fontSize: 32,
+    lineHeight: 30,
+    fontFamily: theme.fontFamily.heading,
     fontVariant: ['tabular-nums'],
   },
-  roundBadge: {
-    borderRadius: 999,
-    paddingHorizontal: theme.space(2.5),
-    paddingVertical: 2,
+  card: {
+    borderRadius: theme.radius.lg,
+    padding: theme.space(4),
   },
-  roundBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+  finalPanel: {
+    marginBottom: theme.space(4),
+    borderRadius: theme.radius.lg,
+    padding: theme.space(4.5),
   },
-  caption: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.4,
+  finalEyebrow: {
+    fontSize: 10,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: '#0b0c0a',
+    opacity: 0.65,
   },
-  hint: {
-    fontSize: 11,
-    textAlign: 'center',
+  finalWinnerName: {
+    fontSize: 40,
+    lineHeight: 36,
+    fontFamily: theme.fontFamily.heading,
+    color: '#0b0c0a',
   },
-  accentCard: {
-    borderWidth: 1,
+  finalWinnerSteps: {
+    fontSize: 26,
+    fontFamily: theme.fontFamily.heading,
+    color: '#0b0c0a',
+    fontVariant: ['tabular-nums'],
   },
-  progressTrack: {
-    height: 4,
-    borderRadius: 2,
-    marginTop: theme.space(3),
-    overflow: 'hidden',
+  finalWinnerMeta: {
+    marginTop: theme.space(1.5),
+    fontSize: 9,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: '#0b0c0a',
+    opacity: 0.7,
   },
-  progressFill: {
-    height: 4,
-    borderRadius: 2,
+  tableHeader: {
+    flexDirection: 'row',
+    paddingHorizontal: theme.space(1.5),
+    paddingBottom: theme.space(2.25),
+    borderBottomWidth: theme.border,
+  },
+  tableHeaderCell: {
+    fontSize: 9,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.space(1.5),
+    paddingVertical: theme.space(2.75),
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  memberRowMine: {
+    borderTopWidth: 0,
+    borderRadius: theme.radius.md,
+    marginHorizontal: -theme.space(2),
+    paddingHorizontal: theme.space(3.5),
+  },
+  rank: {
+    width: 26,
+    fontSize: 18,
+    fontFamily: theme.fontFamily.heading,
+  },
+  memberName: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  stepsCell: {
+    width: 70,
+    textAlign: 'right',
+    fontSize: 17,
+    fontFamily: theme.fontFamily.heading,
+  },
+  ptsCell: {
+    width: 40,
+    textAlign: 'right',
+    fontSize: 15,
+    fontFamily: theme.fontFamily.heading,
   },
   reactionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     flexWrap: 'wrap',
+    gap: theme.space(1.5),
+    paddingHorizontal: theme.space(1.5),
+    paddingBottom: theme.space(2.5),
+  },
+  reactionPill: {
+    paddingHorizontal: theme.space(2),
+    paddingVertical: theme.space(1),
+    borderRadius: theme.radius.pill,
+  },
+  awardRow: {
+    flexDirection: 'row',
     gap: theme.space(2),
     marginTop: theme.space(3),
   },
-  reactionPill: {
-    borderRadius: 999,
-    paddingHorizontal: theme.space(2.5),
-    paddingVertical: 3,
+  awardCell: {
+    flex: 1,
+    padding: theme.space(3.5),
+    borderRadius: theme.radius.md,
   },
-  reactionPillText: {
-    fontSize: theme.font.small,
+  rivalRow: {
+    marginTop: theme.space(3),
+    padding: theme.space(3.5),
+    borderRadius: theme.radius.lg,
+  },
+  pastRound: {
+    padding: theme.space(3.5),
+    borderRadius: theme.radius.lg,
+  },
+  restartMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.space(2.75),
+  },
+  restartCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: theme.border + 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.space(2),
+    paddingTop: theme.space(3),
+    borderTopWidth: theme.border,
+  },
+  composerInput: {
+    flex: 1,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.space(4),
+    paddingVertical: theme.space(3.25),
+    fontSize: 13,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  sendButton: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.space(4.5),
+    paddingVertical: theme.space(3.25),
+    justifyContent: 'center',
+  },
+  sendButtonText: {
+    color: '#0b0c0a',
+    fontSize: 11,
+    fontFamily: theme.fontFamily.bodyBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 });

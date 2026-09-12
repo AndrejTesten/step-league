@@ -6,11 +6,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.yourcompany.stepleague",
+      "bundleIdentifier": "com.andrejtesten.stepleague",
       "infoPlist": {
         "NSHealthShareUsageDescription": "StepLeague reads your daily step count so it can update your standing in your leagues.",
         "NSHealthUpdateUsageDescription": "StepLeague does not write any health data. This permission is required by Apple even for read-only access.",
@@ -22,9 +22,9 @@
       }
     },
     "android": {
-      "package": "com.yourcompany.stepleague",
+      "package": "com.andrejtesten.stepleague",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#ccff33",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -62,6 +62,30 @@
           "android": {
             "minSdkVersion": 26
           }
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#0b0c0a",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#0b0c0a"
+          }
+        }
+      ],
+      "@sentry/react-native",
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Step League can save a league's final results card to your photos.",
+          "savePhotosPermission": "Step League can save a league's final results card to your photos."
         }
       ]
     ],

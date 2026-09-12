@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, Avatar, Muted, Screen, Title } from '@/components/ui';
+import { Avatar, Screen, SectionLabel } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
-import { getFunEquivalence } from '@/lib/equivalences';
-import { getStepStats } from '@/lib/stats';
+import { DEFAULT_DAILY_GOAL, KCAL_PER_STEP, METERS_PER_STEP, STEPS_PER_MINUTE } from '@/lib/equivalences';
+import { getLeaderboard, listMyLeagues } from '@/lib/leagues';
+import { getDailyStepsMap, getStepStats } from '@/lib/stats';
 import { dateKeyInTimezone } from '@/lib/steps-shared';
-import { showSupportPrompt } from '@/lib/support';
 import { useSyncStatus } from '@/lib/sync-status';
+import { useCountdownClock } from '@/lib/use-countdown-clock';
 import { theme, useThemeColors } from '@/lib/theme';
 import type { StepStats } from '@/lib/types';
 
 const EMPTY_STATS: StepStats = { today: 0, month: 0, year: 0, allTime: 0, bestDay: 0, daysLogged: 0, streak: 0 };
 
-const STATS: { key: keyof StepStats; label: string }[] = [
-  { key: 'month', label: 'This month' },
-  { key: 'year', label: 'This year' },
-  { key: 'allTime', label: 'All time' },
-];
+function addDaysToKey(dateKey: string, delta: number): string {
+  const d = new Date(`${dateKey}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatMinutes(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
+}
 
 export function StepCounterPage({ width }: { width: number }) {
   const router = useRouter();
@@ -26,7 +33,11 @@ export function StepCounterPage({ width }: { width: number }) {
   const { session, profile } = useSession();
   const [totals, setTotals] = useState<StepStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
+  const [last7, setLast7] = useState<{ dateKey: string; steps: number }[]>([]);
+  const [rankInfo, setRankInfo] = useState<{ leagueName: string; rank: number } | null>(null);
+  const [leagueCount, setLeagueCount] = useState(0);
   const syncStatus = useSyncStatus();
+  const clock = useCountdownClock(profile?.timezone);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -54,9 +65,31 @@ export function StepCounterPage({ width }: { width: number }) {
     if (!userId || !timezone) return;
     const requestId = ++latestRequestId.current;
     try {
-      const stats = await getStepStats(userId, timezone);
-      if (mountedRef.current && requestId === latestRequestId.current) {
-        setTotals(stats);
+      const [stats, dailyMap, myLeagues] = await Promise.all([
+        getStepStats(userId, timezone),
+        getDailyStepsMap(userId),
+        listMyLeagues().catch(() => []),
+      ]);
+      if (!mountedRef.current || requestId !== latestRequestId.current) return;
+      setTotals(stats);
+      setLeagueCount(myLeagues.length);
+
+      const today = dateKeyInTimezone(new Date(), timezone);
+      const days: { dateKey: string; steps: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const key = addDaysToKey(today, -i);
+        days.push({ dateKey: key, steps: dailyMap.get(key) ?? 0 });
+      }
+      setLast7(days);
+
+      if (myLeagues[0]) {
+        getLeaderboard(myLeagues[0].id)
+          .then(({ rows }) => {
+            if (!mountedRef.current) return;
+            const mine = rows.find((r) => r.is_me);
+            if (mine) setRankInfo({ leagueName: myLeagues[0].name, rank: mine.rank });
+          })
+          .catch(() => {});
       }
     } finally {
       if (mountedRef.current) setLoading(false);
@@ -100,46 +133,266 @@ export function StepCounterPage({ width }: { width: number }) {
   const displayedToday = Math.max(maxDisplayedRef.current, totals.today);
   maxDisplayedRef.current = displayedToday;
 
+  const yesterday = last7.length ? last7[last7.length - 2] : undefined;
+  const todayLabel = timezone
+    ? new Intl.DateTimeFormat(undefined, { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' }).format(
+        new Date()
+      )
+    : '';
+
+  const km = (displayedToday * METERS_PER_STEP) / 1000;
+  const kcal = Math.round(displayedToday * KCAL_PER_STEP);
+  const movingMinutes = displayedToday / STEPS_PER_MINUTE;
+  const maxLast7 = Math.max(1, ...last7.map((d) => d.steps));
+  const dailyGoal = profile?.daily_goal ?? DEFAULT_DAILY_GOAL;
+  const goalPct = Math.min(100, Math.round((displayedToday / dailyGoal) * 100));
+  const toGo = Math.max(0, dailyGoal - displayedToday);
+
   return (
     <Screen style={{ width, paddingTop: theme.space(14) }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Pressable onPress={showSupportPrompt} hitSlop={12}>
-          <Text style={{ fontSize: 22 }}>☕</Text>
-        </Pressable>
+      <View style={styles.header}>
+        {profile?.is_pro ? (
+          <Pressable
+            onPress={() => router.push('/premium')}
+            hitSlop={12}
+            style={[styles.coffeeButton, { borderColor: colors.accent }]}
+          >
+            <Text style={[styles.coffeeLabel, { color: colors.accent }]}>Premium</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => router.push('/premium')}
+            hitSlop={12}
+            style={[styles.coffeeButton, { borderColor: colors.controlBorder }]}
+          >
+            <Text style={[styles.coffeeLabel, { color: colors.textSubtle }]}>Go Premium</Text>
+          </Pressable>
+        )}
         <Pressable onPress={() => router.push('/profile')} hitSlop={12}>
-          <Avatar uri={profile?.avatar_url} name={profile?.display_name} size={40} />
+          <Avatar uri={profile?.avatar_url} name={profile?.display_name} size={32} />
         </Pressable>
       </View>
 
       {syncStatus.error && (
-        <Card style={{ marginTop: theme.space(4), borderColor: colors.danger }}>
-          <Muted style={{ color: colors.danger }}>Steps aren't syncing: {syncStatus.error}</Muted>
-        </Card>
+        <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small, marginBottom: theme.space(2) }}>
+          Steps aren't syncing: {syncStatus.error}
+        </Text>
       )}
 
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.space(2) }}>
-        <Muted>Today</Muted>
-        <Title style={{ fontSize: 64, fontWeight: '800', letterSpacing: -1 }}>
-          {loading ? '—' : displayedToday.toLocaleString()}
-        </Title>
-        <Muted>steps</Muted>
-        {!loading && (
-          <Muted style={{ fontSize: theme.font.small, marginTop: theme.space(2) }}>
-            {getFunEquivalence(displayedToday)}
-          </Muted>
-        )}
+      <Pressable onPress={() => router.push('/stats')}>
+        <SectionLabel>Today · {todayLabel}</SectionLabel>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: theme.space(2.5), marginTop: theme.space(1.5) }}>
+          <Text style={[styles.hero, { color: colors.accent }]}>{loading ? '—' : displayedToday.toLocaleString()}</Text>
+          <Text style={[styles.stepsWord, { color: colors.textMuted }]}>Steps</Text>
+        </View>
+      </Pressable>
+
+      <View style={{ gap: theme.space(2), marginTop: theme.space(4.5) }}>
+        <View style={[styles.goalTrack, { backgroundColor: colors.border }]}>
+          <View style={[styles.goalFill, { width: `${goalPct}%`, backgroundColor: colors.accent }]} />
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={[styles.goalCaption, { color: colors.textMuted }]}>{goalPct}% of {dailyGoal.toLocaleString()}</Text>
+          <Text style={[styles.goalCaption, { color: colors.textMuted }]}>{toGo === 0 ? 'Goal reached' : `${toGo.toLocaleString()} to go`}</Text>
+        </View>
       </View>
 
-      <View style={{ flexDirection: 'row', marginBottom: theme.space(10) }}>
-        {STATS.map((stat) => (
-          <View key={stat.key} style={{ flex: 1, alignItems: 'center', gap: theme.space(1) }}>
-            <Title style={{ fontSize: theme.font.heading }}>
-              {loading ? '—' : totals[stat.key].toLocaleString()}
-            </Title>
-            <Muted style={{ fontSize: theme.font.small }}>{stat.label}</Muted>
-          </View>
-        ))}
+      <View style={{ gap: theme.space(1.75), marginTop: theme.space(5.5), marginBottom: theme.space(4) }}>
+        <View style={styles.chartRow}>
+          {last7.map((d) => (
+            <View
+              key={d.dateKey}
+              style={[
+                styles.bar,
+                {
+                  height: Math.max(4, (d.steps / maxLast7) * 52),
+                  backgroundColor: d.steps > 0 ? colors.accent : colors.borderStrong,
+                },
+              ]}
+            />
+          ))}
+        </View>
+        <View style={styles.chartAxis}>
+          {last7.map((d) => (
+            <Text key={d.dateKey} style={[styles.axisLabel, { color: colors.textDim }]}>
+              {new Intl.DateTimeFormat(undefined, { weekday: 'narrow' }).format(new Date(`${d.dateKey}T00:00:00`))}
+            </Text>
+          ))}
+        </View>
       </View>
+
+      <View style={styles.statsRow}>
+        <View style={[styles.statCell, { backgroundColor: colors.card }]}>
+          <SectionLabel>Distance</SectionLabel>
+          <Text style={[styles.statValue, { color: colors.text }]}>
+            {km.toFixed(1)}
+            <Text style={styles.statUnit}> km</Text>
+          </Text>
+        </View>
+        <View style={[styles.statCell, { backgroundColor: colors.card }]}>
+          <SectionLabel>Kcal</SectionLabel>
+          <Text style={[styles.statValue, { color: colors.text }]}>{kcal}</Text>
+        </View>
+        <View style={[styles.statCell, { backgroundColor: colors.card }]}>
+          <SectionLabel>Moving</SectionLabel>
+          <Text style={[styles.statValue, { color: colors.text }]}>{formatMinutes(movingMinutes)}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.countdownCard, { borderColor: colors.controlBorder }]}>
+        <View>
+          <SectionLabel>Scores unlock in</SectionLabel>
+          <Text style={[styles.countdownCaption, { color: colors.textSubtle }]}>
+            {leagueCount} league{leagueCount === 1 ? '' : 's'} waiting
+          </Text>
+        </View>
+        <Text style={[styles.countdownClock, { color: colors.accent }]}>{clock}</Text>
+      </View>
+
+      {yesterday && (
+        <View style={{ marginTop: theme.space(4) }}>
+          <SectionLabel>Yesterday</SectionLabel>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: theme.space(2) }}>
+            <Text style={[styles.yesterdayValue, { color: colors.text }]}>{yesterday.steps.toLocaleString()}</Text>
+            {rankInfo && (
+              <Text style={[styles.rankText, { color: colors.accent }]}>
+                {ordinal(rankInfo.rank)} · {rankInfo.leagueName}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
     </Screen>
   );
 }
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.space(4),
+  },
+  coffeeButton: {
+    borderWidth: theme.border,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.space(3),
+    paddingVertical: theme.space(2),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.space(1.75),
+  },
+  coffeeLabel: {
+    fontSize: 10,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  hero: {
+    fontSize: 84,
+    lineHeight: 74,
+    fontFamily: theme.fontFamily.heading,
+    letterSpacing: -1.5,
+    fontVariant: ['tabular-nums'],
+  },
+  stepsWord: {
+    fontSize: 12,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    paddingBottom: theme.space(1.5),
+  },
+  goalTrack: {
+    height: 6,
+    borderRadius: theme.radius.pill,
+    overflow: 'hidden',
+  },
+  goalFill: {
+    height: '100%',
+    borderRadius: theme.radius.pill,
+  },
+  goalCaption: {
+    fontSize: 10,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  chartRow: {
+    flexDirection: 'row',
+    gap: 3,
+    height: 52,
+    alignItems: 'flex-end',
+  },
+  bar: {
+    flex: 1,
+    borderRadius: 1,
+  },
+  chartAxis: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  axisLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 9,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: theme.space(2),
+  },
+  statCell: {
+    flex: 1,
+    borderRadius: theme.radius.md,
+    padding: theme.space(3.5),
+    gap: theme.space(1.5),
+  },
+  statValue: {
+    fontSize: 28,
+    fontFamily: theme.fontFamily.heading,
+    fontVariant: ['tabular-nums'],
+  },
+  statUnit: {
+    fontSize: 12,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  countdownCard: {
+    marginTop: theme.space(4),
+    borderWidth: theme.border,
+    borderRadius: theme.radius.md,
+    padding: theme.space(3.5),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.space(3),
+  },
+  countdownCaption: {
+    fontSize: 12,
+    fontFamily: theme.fontFamily.bodyMedium,
+    marginTop: theme.space(1.75),
+  },
+  countdownClock: {
+    fontSize: 36,
+    lineHeight: 32,
+    fontFamily: theme.fontFamily.heading,
+    fontVariant: ['tabular-nums'],
+  },
+  yesterdayValue: {
+    fontSize: 30,
+    fontFamily: theme.fontFamily.heading,
+    fontVariant: ['tabular-nums'],
+  },
+  rankText: {
+    fontSize: 11,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 0.6,
+  },
+});

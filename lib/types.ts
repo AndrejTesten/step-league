@@ -1,5 +1,7 @@
 // Shared types matching the Supabase schema (see supabase/schema.sql).
 
+export type ColorTheme = 'lime' | 'cyan' | 'ember' | 'violet' | 'paper' | 'mono';
+
 export type Profile = {
   id: string;
   username: string;
@@ -10,8 +12,12 @@ export type Profile = {
   city: string | null;
   country: string | null;
   roast_mode: boolean;
+  daily_goal: number;
+  color_theme: ColorTheme;
   created_at: string;
 };
+
+export type LeagueScoringMode = 'total_steps' | 'daily_wins';
 
 export type League = {
   id: string;
@@ -21,6 +27,12 @@ export type League = {
   deadline: string; // ISO date, end of the current round
   current_round_start: string | null; // null until the league's first restart
   round_number: number;
+  scoring_mode: LeagueScoringMode;
+  is_public: boolean;
+  /** Optional, freeform house-rule text — e.g. "Winner picks the next restaurant." Not enforced by the app. */
+  winner_stakes: string | null;
+  /** Optional, freeform house-rule text — e.g. "Loser buys coffee for a week." Not enforced by the app. */
+  loser_stakes: string | null;
   created_at: string;
 };
 
@@ -57,6 +69,39 @@ export type LeaderboardRow = {
   todaySteps: number;
   deltaSinceYesterday: number;
   reactions: { emoji: string; count: number }[];
+  /** Count of days this member ranked #1 in the current round — the "Pts" column. */
+  points: number;
+};
+
+export type PublicLeaguePreview = {
+  id: string;
+  name: string;
+  deadline: string;
+  member_count: number;
+};
+
+export type LeagueMessage = {
+  id: string;
+  league_id: string;
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  body: string;
+  created_at: string;
+  is_me: boolean;
+};
+
+export type LeagueDailyResult = {
+  date: string;
+  winner: { user_id: string; display_name: string; total_steps: number } | null;
+  rows: {
+    user_id: string;
+    display_name: string;
+    total_steps: number;
+    rank: number;
+    previousRank: number | null;
+    is_me: boolean;
+  }[];
 };
 
 export type LeagueAward = {
@@ -84,6 +129,38 @@ export type StepStats = StepTotals & {
   bestDay: number;
   daysLogged: number;
   streak: number;
+};
+
+export type PeekRow = {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  now_steps: number;
+  pace: number;
+  is_me: boolean;
+};
+
+export type PeekResult = {
+  rows: PeekRow[];
+  gapToFirst: number | null;
+  leaderName: string | null;
+};
+
+export type PeekStatus = {
+  remaining: number;
+  is_pro: boolean;
+};
+
+/** One row of "every league you've played" for the premium Stat History screen. */
+export type LeaguePlayedSummary = {
+  league_id: string;
+  name: string;
+  memberCount: number;
+  isLive: boolean;
+  rank: number;
+  totalSteps: number;
+  /** Calendar length of the round, in days. */
+  days: number;
 };
 
 export type LeaderboardScope = 'city' | 'country' | 'global';

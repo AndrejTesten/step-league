@@ -8,3 +8,7 @@
 export async function syncSteps(_timezone: string, _daysToBackfill?: number): Promise<void> {
   console.warn('[steps.web] Step sync is not available on web.');
 }
+
+export async function getHourlySteps(_dateKey: string, _timezone: string): Promise<number[] | null> {
+  return null;
+}

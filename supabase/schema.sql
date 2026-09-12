@@ -30,6 +30,7 @@ alter table public.profiles add column if not exists avatar_url text;
 alter table public.profiles add column if not exists city text;
 alter table public.profiles add column if not exists country text;
 alter table public.profiles add column if not exists roast_mode boolean not null default false;
+alter table public.profiles add column if not exists daily_goal integer not null default 10000 check (daily_goal > 0);
 
 alter table public.profiles enable row level security;
 
@@ -303,7 +304,7 @@ create trigger trg_leagues_invite_code
 
 -- Creator becomes a member automatically, right after a league is created.
 create or replace function public.add_creator_as_member() returns trigger
-language plpgsql security definer as $$
+language plpgsql security definer set search_path = public as $$
 begin
   insert into public.league_members (league_id, user_id)
   values (new.id, new.created_by)
@@ -333,6 +334,14 @@ declare
   v_league_id uuid;
   v_deadline date;
 begin
+  -- 10 attempts per rolling 10 minutes — a 6-char invite code is 32^6
+  -- combinations, not guessable by a person mistyping, but scriptable
+  -- without this cap. Checked before the lookup so even failed guesses
+  -- count against the limit.
+  if not public.check_rate_limit('join_league', 10, 600) then
+    raise exception 'Too many join attempts — wait a few minutes and try again.';
+  end if;
+
   select id, deadline into v_league_id, v_deadline
   from public.leagues
   where invite_code = upper(p_invite_code);
@@ -438,6 +447,46 @@ as $$
 $$;
 
 grant execute on function public.get_leaderboard(text, text, text, int, int) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- get_leaderboard_rank_summary(scope, value) — "Your place in Poland: 4,182
+-- of 91,203, top 5%" hero stat on the global leaderboard screen. Same
+-- ranking definition as get_leaderboard() above (kept in sync manually,
+-- since Postgres has no clean way to share a CTE between two functions);
+-- returns nulls for my_rank when the caller has no steps logged in scope.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_leaderboard_rank_summary(
+  p_scope text,
+  p_value text default null
+)
+returns table (my_rank bigint, total bigint)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with scoped as (
+    select
+      p.id as user_id,
+      coalesce(sum(ds.steps), 0) as total_steps
+    from public.profiles p
+    left join public.daily_steps ds on ds.user_id = p.id
+    where
+      p_scope = 'global'
+      or (p_scope = 'country' and p.country is not distinct from p_value)
+      or (p_scope = 'city' and p.city is not distinct from p_value)
+    group by p.id
+  ),
+  ranked as (
+    select *, rank() over (order by total_steps desc) as rank
+    from scoped
+  )
+  select
+    (select rank from ranked where user_id = auth.uid()) as my_rank,
+    (select count(*) from ranked) as total;
+$$;
+
+grant execute on function public.get_leaderboard_rank_summary(text, text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- search_locations(scope, query) — powers the city/country picker above the
@@ -595,7 +644,19 @@ create policy "league-mates can view round history"
 -- only moves the goalposts (current_round_start, deadline, round_number)
 -- for what counts toward the *new* round.
 -- ---------------------------------------------------------------------------
-create or replace function public.restart_league(p_league_id uuid, p_new_deadline date)
+-- p_member_ids: when provided, everyone currently in league_members who is
+-- NOT the creator and NOT in this list is removed as part of the restart —
+-- the rematch screen's "who's playing this round" picker. Null (the
+-- default) means "keep everyone," so older clients calling this with just
+-- the first two arguments still work unchanged. The creator is never
+-- removable this way — see leave_league() below for exits.
+create or replace function public.restart_league(
+  p_league_id uuid,
+  p_new_deadline date,
+  p_member_ids uuid[] default null,
+  p_winner_stakes text default null,
+  p_loser_stakes text default null
+)
 returns void
 language plpgsql
 security definer
@@ -630,9 +691,480 @@ begin
   update public.leagues
   set deadline = p_new_deadline,
       current_round_start = current_date,
-      round_number = v_league.round_number + 1
+      round_number = v_league.round_number + 1,
+      winner_stakes = p_winner_stakes,
+      loser_stakes = p_loser_stakes
   where id = p_league_id;
+
+  if p_member_ids is not null then
+    delete from public.league_members
+    where league_id = p_league_id
+      and user_id <> v_league.created_by
+      and user_id <> all(p_member_ids);
+  end if;
 end;
 $$;
 
-grant execute on function public.restart_league(uuid, date) to authenticated;
+grant execute on function public.restart_league(uuid, date, uuid[], text, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- leave_league() — a member removes themselves. The creator can't use this
+-- (their league would be left with no owner able to restart it or manage
+-- it) — they'd need a "delete league" or "transfer ownership" feature,
+-- neither of which exists yet, so for now the creator simply can't exit
+-- their own league at all.
+-- ---------------------------------------------------------------------------
+create or replace function public.leave_league(p_league_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_created_by uuid;
+begin
+  select created_by into v_created_by from public.leagues where id = p_league_id;
+
+  if v_created_by is null then
+    raise exception 'League not found.';
+  end if;
+  if v_created_by = auth.uid() then
+    raise exception 'As the creator, you can''t leave your own league.';
+  end if;
+
+  delete from public.league_members
+  where league_id = p_league_id and user_id = auth.uid();
+end;
+$$;
+
+grant execute on function public.leave_league(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- scoring_mode + is_public — added for the "Modernist" redesign's create-
+-- league screen. scoring_mode is informational for now (leaderboards still
+-- rank by total_steps either way; 'daily_wins' just changes what the create
+-- screen's copy promises and which stat the UI leads with) — the "Pts"
+-- column shown on every league (see getLeagueDailyWins in lib/leagues.ts) is
+-- derived from leaderboard_snapshots and needs no schema support of its own.
+-- ---------------------------------------------------------------------------
+alter table public.leagues add column if not exists scoring_mode text not null default 'total_steps'
+  check (scoring_mode in ('total_steps', 'daily_wins'));
+alter table public.leagues add column if not exists is_public boolean not null default false;
+
+-- winner_stakes / loser_stakes — both optional, purely informational
+-- (freeform text the league creator writes, e.g. "Winner picks the next
+-- restaurant" / "Loser buys coffee for a week"). Nothing in the app
+-- enforces or verifies these get honored — it's a house-rule the members
+-- agree to themselves, the same way a real office pool works.
+alter table public.leagues add column if not exists winner_stakes text check (char_length(winner_stakes) <= 140);
+alter table public.leagues add column if not exists loser_stakes text check (char_length(loser_stakes) <= 140);
+
+-- ---------------------------------------------------------------------------
+-- search_public_leagues / join_public_league — the join screen's "Open
+-- leagues near you" section. Mirrors get_league_preview()/join_league()
+-- above, but keyed by public.leagues.is_public instead of an invite code.
+-- ---------------------------------------------------------------------------
+create or replace function public.search_public_leagues(
+  p_city text default null,
+  p_country text default null,
+  p_query text default null
+)
+returns table (id uuid, name text, deadline date, member_count bigint)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select l.id, l.name, l.deadline, count(lm.user_id) as member_count
+  from public.leagues l
+  left join public.league_members lm on lm.league_id = l.id
+  where l.is_public = true
+    and l.deadline >= current_date
+    and (p_query is null or p_query = '' or l.name ilike '%' || p_query || '%')
+  group by l.id, l.name, l.deadline
+  order by
+    -- Leagues with a member from the same city/country as the caller sort
+    -- first, then everything else, newest-created first within each group.
+    case
+      when p_city is not null and exists (
+        select 1 from public.league_members m2
+        join public.profiles p2 on p2.id = m2.user_id
+        where m2.league_id = l.id and p2.city is not distinct from p_city
+      ) then 0
+      when p_country is not null and exists (
+        select 1 from public.league_members m3
+        join public.profiles p3 on p3.id = m3.user_id
+        where m3.league_id = l.id and p3.country is not distinct from p_country
+      ) then 1
+      else 2
+    end,
+    l.created_at desc
+  limit 30;
+$$;
+
+grant execute on function public.search_public_leagues(text, text, text) to authenticated;
+
+create or replace function public.join_public_league(p_league_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_is_public boolean;
+  v_deadline date;
+begin
+  if not public.check_rate_limit('join_public_league', 20, 600) then
+    raise exception 'Too many join attempts — wait a few minutes and try again.';
+  end if;
+
+  select is_public, deadline into v_is_public, v_deadline
+  from public.leagues where id = p_league_id;
+
+  if v_is_public is null or v_is_public = false then
+    raise exception 'This league is not open to join.';
+  end if;
+  if v_deadline < current_date then
+    raise exception 'This league has already ended.';
+  end if;
+
+  insert into public.league_members (league_id, user_id)
+  values (p_league_id, auth.uid())
+  on conflict do nothing;
+end;
+$$;
+
+grant execute on function public.join_public_league(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- messages — league chat (design screen "1g"). One flat table per league;
+-- members can read and post, using the same is_league_member() helper every
+-- other league-scoped policy above uses (avoids the RLS self-recursion that
+-- function exists to sidestep).
+-- ---------------------------------------------------------------------------
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references public.leagues (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists messages_league_id_created_at_idx on public.messages (league_id, created_at);
+
+alter table public.messages enable row level security;
+
+drop policy if exists "league-mates can view messages" on public.messages;
+create policy "league-mates can view messages"
+  on public.messages for select
+  to authenticated
+  using (public.is_league_member(messages.league_id, auth.uid()));
+
+drop policy if exists "league-mates can post messages" on public.messages;
+create policy "league-mates can post messages"
+  on public.messages for insert
+  to authenticated
+  with check (user_id = auth.uid() and public.is_league_member(messages.league_id, auth.uid()));
+
+-- Realtime: lets the league chat UI subscribe to new rows instead of
+-- polling. Safe to re-run — Postgres just errors quietly if already added,
+-- which this ignores.
+do $$
+begin
+  alter publication supabase_realtime add table public.messages;
+exception when duplicate_object then null;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Premium: is_pro (already existed as a stub) now actually gates something.
+-- color_theme is the chosen accent palette — 'lime' is the free default; the
+-- other four (cyan/ember/violet/mono) are premium. Enforcement of "premium
+-- only" happens client-side for theme selection (cosmetic, low stakes) but
+-- server-side for peeks below (a real quota worth actually enforcing).
+-- ---------------------------------------------------------------------------
+alter table public.profiles add column if not exists color_theme text not null default 'lime'
+  check (color_theme in ('lime', 'cyan', 'ember', 'violet', 'paper', 'mono'));
+
+-- is_pro must never be settable by the client SDK — the "users update their
+-- own profile" policy above is a row-level check (id = auth.uid()), which
+-- says nothing about which *columns* a user may touch, so without this an
+-- authenticated client can run `update profiles set is_pro = true` on their
+-- own row and grant themselves premium for free.
+--
+-- A column-level `revoke update (is_pro) ...` alone does NOT fix this: every
+-- Supabase project grants table-wide `update` on all public tables to
+-- anon/authenticated by default (so RLS policies, not column grants, are
+-- normally what limits writes), and a table-wide grant covers every column
+-- regardless of a more specific column-level revoke layered on top. The only
+-- way to actually carve out one column is to revoke the table-wide privilege
+-- entirely and re-grant UPDATE on an explicit allow-list of the columns the
+-- app's UI actually lets a user edit — leaving is_pro (and username,
+-- display_name, timezone, roast_mode, created_at) off that list.
+--
+-- The service_role key — used only by Edge Functions / a verified-purchase
+-- webhook, never shipped to the app — bypasses grants entirely, so that
+-- remains the sole way to flip is_pro once real billing is wired up. Until
+-- then, flip it manually for testing via the Supabase SQL editor:
+-- update public.profiles set is_pro = true where id = '<uuid>';
+revoke update on public.profiles from authenticated, anon;
+grant update (city, country, daily_goal, color_theme, avatar_url) on public.profiles to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- peek_usage — one row per (user, local day), counting how many times
+-- they've used a live "Peek" today. Free = 1/day, premium = 3/day. Written
+-- only through use_peek() below so the limit can't be bypassed by a client
+-- just upserting a higher count into its own row.
+-- ---------------------------------------------------------------------------
+create table if not exists public.peek_usage (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  date date not null,
+  count integer not null default 0,
+  primary key (user_id, date)
+);
+
+alter table public.peek_usage enable row level security;
+
+drop policy if exists "users view their own peek usage" on public.peek_usage;
+create policy "users view their own peek usage"
+  on public.peek_usage for select
+  to authenticated
+  using (user_id = auth.uid());
+  -- No insert/update policy for regular users — only use_peek() (SECURITY
+  -- DEFINER) writes here, so the daily cap is actually enforced server-side.
+
+-- use_peek() — atomically checks today's count against the caller's limit
+-- (1 free, 3 premium) and increments it if allowed. Returns whether this
+-- call was allowed and how many peeks remain today, so the client can show
+-- "2 of 3 left" without a second round trip.
+create or replace function public.use_peek()
+returns table (allowed boolean, remaining integer, is_pro boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_is_pro boolean;
+  v_limit integer;
+  v_today date := current_date;
+  v_count integer;
+begin
+  select p.is_pro into v_is_pro from public.profiles p where p.id = auth.uid();
+  v_limit := case when v_is_pro then 3 else 1 end;
+
+  insert into public.peek_usage (user_id, date, count)
+  values (auth.uid(), v_today, 0)
+  on conflict (user_id, date) do nothing;
+
+  select pu.count into v_count
+  from public.peek_usage pu
+  where pu.user_id = auth.uid() and pu.date = v_today
+  for update;
+
+  if v_count >= v_limit then
+    return query select false, greatest(v_limit - v_count, 0), coalesce(v_is_pro, false);
+    return;
+  end if;
+
+  update public.peek_usage
+  set count = count + 1
+  where user_id = auth.uid() and date = v_today;
+
+  return query select true, (v_limit - (v_count + 1)), coalesce(v_is_pro, false);
+end;
+$$;
+
+grant execute on function public.use_peek() to authenticated;
+
+-- peeks_remaining_today() — read-only version of the same limit check, so
+-- the UI can show "2 of 3 left" on screen load without consuming a peek.
+create or replace function public.peeks_remaining_today()
+returns table (remaining integer, is_pro boolean)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_is_pro boolean;
+  v_limit integer;
+  v_count integer;
+begin
+  select p.is_pro into v_is_pro from public.profiles p where p.id = auth.uid();
+  v_limit := case when v_is_pro then 3 else 1 end;
+
+  select pu.count into v_count
+  from public.peek_usage pu
+  where pu.user_id = auth.uid() and pu.date = current_date;
+
+  return query select greatest(v_limit - coalesce(v_count, 0), 0), coalesce(v_is_pro, false);
+end;
+$$;
+
+grant execute on function public.peeks_remaining_today() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- get_my_league_history() — every league (finished or live) the caller has
+-- ever been a member of, with their finishing/current position and total —
+-- powers the premium Stat History screen's "Every league you've played"
+-- list. Recomputed from daily_steps like every other standings query in
+-- this app (see lib/leagues.ts), not stored.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_my_league_ids()
+returns table (league_id uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select league_id from public.league_members where user_id = auth.uid();
+$$;
+
+grant execute on function public.get_my_league_ids() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Performance indexes. Every table so far has relied on its primary key for
+-- lookups, which only helps when the PK's *leading* column is what you're
+-- filtering by — league_members' PK is (league_id, user_id), so "leagues
+-- this user belongs to" (listMyLeagues, get_my_league_ids, and the
+-- correlated-subquery membership checks inside several RLS policies above)
+-- was a full scan on user_id, not an index lookup. Same story for
+-- leaderboard_snapshots: PK is (league_id, user_id, snapshot_date), but
+-- getMyTotalWins()/getMySnapshotWinStats() (profile "Wins" stat, premium
+-- Stat History's win rate) filter by user_id first. And get_leaderboard()'s
+-- city/country scoping had nothing but a sequential scan over all of
+-- profiles to find matches (reactions' own PK already leads with league_id,
+-- so no extra index needed there). None of this broke anything at friend-group
+-- scale; all of it gets linearly worse as the user base grows, which is
+-- exactly when it's hardest to fix without downtime — adding these now,
+-- while the tables are still small and the index builds are instant, is the
+-- cheap time to do it.
+-- ---------------------------------------------------------------------------
+create index if not exists league_members_user_id_idx on public.league_members (user_id);
+create index if not exists leaderboard_snapshots_user_id_snapshot_date_idx on public.leaderboard_snapshots (user_id, snapshot_date);
+create index if not exists profiles_country_idx on public.profiles (country);
+create index if not exists profiles_city_idx on public.profiles (city);
+
+-- ---------------------------------------------------------------------------
+-- Known scaling limit, not fixed here: get_leaderboard() and
+-- get_leaderboard_rank_summary() recompute every user's lifetime total by
+-- summing the *entire* daily_steps table on every single call (the indexes
+-- above make the city/country filtering and the join itself fast, but the
+-- SUM(steps) aggregation is still real work proportional to how many
+-- days of history exist across every user in scope). Fine for now; once
+-- daily_steps has millions of rows, the fix is a denormalized running total
+-- (e.g. profiles.lifetime_steps, maintained incrementally by
+-- upsert_daily_steps_monotonic() instead of recomputed from scratch) —
+-- deliberately not done in this pass since getting an incremental counter's
+-- correctness wrong silently corrupts every leaderboard, and that's not a
+-- change to make without dedicated testing.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- Rate limiting. use_peek() already had its own bespoke daily-quota table
+-- (peek_usage) because "1 free / 3 premium per day" is a product feature,
+-- not just abuse prevention. Everything below is purely abuse prevention —
+-- capping how fast one account can hit a handful of write paths that were
+-- previously uncapped: brute-forcing a league's 6-character invite code
+-- (32^6 combinations — not guessable by hand, but trivial to script without
+-- a cap), flooding a league's chat, mass-creating leagues, or spamming
+-- reactions. One generic table + one generic function, reused by every
+-- policy/function below via a distinct `p_action` key per limit, rather
+-- than a bespoke table per action like peek_usage — these limits don't need
+-- peek's "reset at local midnight" semantics, just a plain sliding window.
+-- ---------------------------------------------------------------------------
+create table if not exists public.rate_limits (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  action text not null,
+  window_start timestamptz not null default now(),
+  count integer not null default 0,
+  primary key (user_id, action)
+);
+
+alter table public.rate_limits enable row level security;
+-- No policies for regular users at all, on purpose — this table is only
+-- ever read or written by check_rate_limit() below (SECURITY DEFINER), so
+-- a client can't inspect or reset its own limits.
+
+-- Returns true if the action is allowed (and records it), false if the
+-- caller has hit p_max calls within the trailing p_window_seconds. Callers
+-- decide what to do with `false` — an RPC raises an exception; an RLS
+-- `with check` clause just makes the whole insert fail closed.
+create or replace function public.check_rate_limit(p_action text, p_max integer, p_window_seconds integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_window_start timestamptz;
+  v_count integer;
+begin
+  insert into public.rate_limits (user_id, action, window_start, count)
+  values (auth.uid(), p_action, v_now, 0)
+  on conflict (user_id, action) do nothing;
+
+  select window_start, count into v_window_start, v_count
+  from public.rate_limits
+  where user_id = auth.uid() and action = p_action
+  for update;
+
+  if v_now - v_window_start > make_interval(secs => p_window_seconds) then
+    update public.rate_limits set window_start = v_now, count = 1
+    where user_id = auth.uid() and action = p_action;
+    return true;
+  end if;
+
+  if v_count >= p_max then
+    return false;
+  end if;
+
+  update public.rate_limits set count = count + 1
+  where user_id = auth.uid() and action = p_action;
+  return true;
+end;
+$$;
+
+grant execute on function public.check_rate_limit(text, integer, integer) to authenticated;
+
+-- League chat: 20 messages per rolling minute — generous for a real
+-- conversation, blocks a flood.
+drop policy if exists "league-mates can post messages" on public.messages;
+create policy "league-mates can post messages"
+  on public.messages for insert
+  to authenticated
+  with check (
+    user_id = auth.uid()
+    and public.is_league_member(messages.league_id, auth.uid())
+    and public.check_rate_limit('send_message', 20, 60)
+  );
+
+-- League creation: 10 per rolling hour — nobody legitimately creates
+-- leagues faster than that; blocks using league creation to spam other
+-- tables (add_creator_as_member, invite codes, etc.).
+drop policy if exists "users create leagues as themselves" on public.leagues;
+create policy "users create leagues as themselves"
+  on public.leagues for insert
+  to authenticated
+  with check (created_by = auth.uid() and public.check_rate_limit('create_league', 10, 3600));
+
+-- Reactions: 30 per rolling hour across both first-react (insert) and
+-- changing an existing reaction (update) — reacting to every teammate a few
+-- times a day is normal; hundreds an hour isn't.
+drop policy if exists "league-mates can react as themselves" on public.reactions;
+create policy "league-mates can react as themselves"
+  on public.reactions for insert
+  to authenticated
+  with check (
+    from_user_id = auth.uid()
+    and public.is_league_member(reactions.league_id, auth.uid())
+    and public.is_league_member(reactions.league_id, reactions.to_user_id)
+    and public.check_rate_limit('react', 30, 3600)
+  );
+
+drop policy if exists "users update their own reaction" on public.reactions;
+create policy "users update their own reaction"
+  on public.reactions for update
+  to authenticated
+  using (from_user_id = auth.uid())
+  with check (from_user_id = auth.uid() and public.check_rate_limit('react', 30, 3600));

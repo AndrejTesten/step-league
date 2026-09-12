@@ -20,8 +20,14 @@ const LIVE_SYNC_DAYS_TO_BACKFILL = 0; // today only
  * LIVE_SYNC_INTERVAL_MS while it stays in the foreground. Call this once,
  * near the root of the authenticated part of the app (see
  * app/(app)/_layout.tsx) — not per-screen.
+ *
+ * `enabled` gates the whole thing on the in-app steps-access consent screen
+ * (lib/steps-consent.ts) — syncSteps() is what triggers the native Health
+ * Connect/HealthKit permission dialog the first time it runs, so this must
+ * stay false until the user has seen that in-app explanation, not just
+ * "whenever the authenticated layout happens to mount."
  */
-export function useStepSync() {
+export function useStepSync(enabled: boolean) {
   const { session, profile } = useSession();
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
@@ -43,7 +49,7 @@ export function useStepSync() {
   const timezone = profile?.timezone;
 
   useEffect(() => {
-    if (!userId || !timezone) return;
+    if (!enabled || !userId || !timezone) return;
 
     // Guards against overlapping syncs: if one call is slow (a flaky Health
     // Connect response, a slow network for the Supabase upsert, etc.) the
@@ -81,7 +87,7 @@ export function useStepSync() {
       sub.remove();
       clearInterval(interval);
     };
-    // Only userId/timezone (stable primitives) — see comment above.
+    // Only userId/timezone/enabled (stable primitives) — see comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, timezone]);
+  }, [enabled, userId, timezone]);
 }

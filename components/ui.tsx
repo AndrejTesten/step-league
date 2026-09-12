@@ -14,6 +14,7 @@ import {
   type TextProps,
   type ViewProps,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme, useThemeColors } from '@/lib/theme';
 
@@ -26,7 +27,7 @@ export function Card({ style, ...props }: ViewProps) {
   const colors = useThemeColors();
   return (
     <View
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, style]}
+      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.borderStrong }, style]}
       {...props}
     />
   );
@@ -44,7 +45,13 @@ export function Heading({ style, ...props }: TextProps) {
 
 export function Muted({ style, ...props }: TextProps) {
   const colors = useThemeColors();
-  return <Text style={[styles.muted, { color: colors.textMuted }, style]} {...props} />;
+  return <Text style={[styles.muted, { color: colors.textSubtle }, style]} {...props} />;
+}
+
+/** 9-10px uppercase tracked micro-label — field/column labels throughout the design. */
+export function SectionLabel({ style, ...props }: TextProps) {
+  const colors = useThemeColors();
+  return <Text style={[styles.sectionLabel, { color: colors.textMuted }, style]} {...props} />;
 }
 
 export const Input = forwardRef<TextInput, TextInputProps>(function Input({ style, ...props }, ref) {
@@ -54,10 +61,10 @@ export const Input = forwardRef<TextInput, TextInputProps>(function Input({ styl
       ref={ref}
       style={[
         styles.input,
-        { borderColor: colors.border, backgroundColor: colors.card, color: colors.text },
+        { borderColor: colors.controlBorder, backgroundColor: colors.card, color: colors.text },
         style,
       ]}
-      placeholderTextColor={colors.textMuted}
+      placeholderTextColor={colors.textDim}
       autoCapitalize="none"
       autoCorrect={false}
       {...props}
@@ -68,22 +75,29 @@ export const Input = forwardRef<TextInput, TextInputProps>(function Input({ styl
 type ButtonProps = PressableProps & {
   label: string;
   loading?: boolean;
-  variant?: 'primary' | 'secondary' | 'danger';
+  variant?: 'primary' | 'secondary' | 'danger' | 'pill';
+  /** Trailing "→" glyph — the design uses this on most primary CTAs. */
+  arrow?: boolean;
 };
 
-export function Button({ label, loading, variant = 'primary', style, disabled, ...props }: ButtonProps) {
+export function Button({ label, loading, variant = 'primary', arrow, style, disabled, ...props }: ButtonProps) {
   const colors = useThemeColors();
+  const isPill = variant === 'pill';
   const backgroundColor =
-    variant === 'danger' ? colors.danger : variant === 'secondary' ? colors.card : colors.primary;
-  const labelColor = variant === 'secondary' ? colors.text : colors.primaryText;
+    variant === 'danger' ? colors.danger : variant === 'secondary' || isPill ? 'transparent' : colors.accent;
+  const labelColor = variant === 'secondary' ? colors.textSubtle : isPill ? colors.accent : colors.primaryText;
 
   return (
     <Pressable
       style={({ pressed }) => [
-        styles.button,
+        isPill ? styles.pillButton : styles.button,
         { backgroundColor },
-        variant === 'secondary' && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-        pressed && { opacity: 0.85 },
+        variant === 'secondary' && { borderWidth: theme.border, borderColor: colors.controlBorder },
+        isPill && { borderWidth: theme.border, borderColor: colors.accent },
+        pressed &&
+          (variant === 'secondary' || isPill
+            ? { backgroundColor: colors.hoverTint }
+            : { backgroundColor: variant === 'danger' ? colors.danger : colors.accentHover }),
         (disabled || loading) && { opacity: 0.5 },
         typeof style === 'function' ? undefined : style,
       ]}
@@ -93,7 +107,10 @@ export function Button({ label, loading, variant = 'primary', style, disabled, .
       {loading ? (
         <ActivityIndicator color={labelColor} />
       ) : (
-        <Text style={[styles.buttonLabel, { color: labelColor }]}>{label}</Text>
+        <>
+          <Text style={[isPill ? styles.pillButtonLabel : styles.buttonLabel, { color: labelColor }]}>{label}</Text>
+          {arrow && <Text style={[styles.buttonArrow, { color: labelColor }]}>→</Text>}
+        </>
       )}
     </Pressable>
   );
@@ -103,25 +120,22 @@ type AvatarProps = {
   uri?: string | null;
   name?: string | null;
   size?: number;
+  /** "you" chips render filled with the accent color instead of the default dark chip. */
+  variant?: 'default' | 'accent';
 };
 
-export function Avatar({ uri, name, size = 56 }: AvatarProps) {
+export function Avatar({ uri, name, size = 56, variant = 'default' }: AvatarProps) {
   const colors = useThemeColors();
   const initial = (name?.trim()?.[0] ?? '?').toUpperCase();
   const dimension = { width: size, height: size, borderRadius: size / 2 };
   if (uri) {
     return <Image source={{ uri }} style={[styles.avatar, { backgroundColor: colors.card }, dimension]} />;
   }
+  const bg = variant === 'accent' ? colors.accent : colors.borderStrong;
+  const fg = variant === 'accent' ? colors.primaryText : colors.text;
   return (
-    <View
-      style={[
-        styles.avatar,
-        styles.avatarFallback,
-        { backgroundColor: colors.card, borderColor: colors.border },
-        dimension,
-      ]}
-    >
-      <Text style={{ color: colors.textMuted, fontSize: size * 0.4, fontWeight: '700' }}>{initial}</Text>
+    <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: bg }, dimension]}>
+      <Text style={{ color: fg, fontSize: size * 0.36, fontFamily: theme.fontFamily.bodySemiBold }}>{initial}</Text>
     </View>
   );
 }
@@ -142,9 +156,9 @@ export function Tabs<T extends string>({ options, value, onChange }: TabsProps<T
           <Pressable
             key={opt.value}
             onPress={() => onChange(opt.value)}
-            style={[styles.tab, active && { backgroundColor: colors.cardElevated }]}
+            style={[styles.tab, active && { backgroundColor: colors.accent }]}
           >
-            <Text style={[styles.tabLabel, { color: active ? colors.text : colors.textMuted }]}>
+            <Text style={[styles.tabLabel, { color: active ? colors.primaryText : colors.textMuted }]}>
               {opt.label}
             </Text>
           </Pressable>
@@ -208,7 +222,7 @@ export function SearchableSelect({
         }}
       />
       {open && (
-        <View style={[styles.dropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.dropdown, { backgroundColor: colors.card, borderColor: colors.controlBorder }]}>
           {loading ? (
             <ActivityIndicator style={{ padding: theme.space(3) }} color={colors.textMuted} />
           ) : (
@@ -228,7 +242,9 @@ export function SearchableSelect({
                       setOpen(false);
                     }}
                   >
-                    <Text style={{ color: colors.text, fontSize: theme.font.body }}>{opt}</Text>
+                    <Text style={{ color: colors.text, fontSize: theme.font.body, fontFamily: theme.fontFamily.bodyMedium }}>
+                      {opt}
+                    </Text>
                   </Pressable>
                 ))
               )}
@@ -256,13 +272,18 @@ type SheetProps = {
  */
 export function Sheet({ visible, onClose, title, children }: SheetProps) {
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.sheetBackdrop} onPress={onClose}>
         <Pressable
-          style={[styles.sheetCard, { backgroundColor: colors.bg, shadowColor: colors.shadow }]}
+          style={[
+            styles.sheetCard,
+            { backgroundColor: colors.card, borderColor: colors.borderStrong, shadowColor: colors.shadow, paddingBottom: insets.bottom + theme.space(5) },
+          ]}
           onPress={(e) => e.stopPropagation()}
         >
+          <View style={[styles.sheetGrabber, { backgroundColor: colors.controlBorder }]} />
           {title && <Heading style={{ marginBottom: theme.space(3) }}>{title}</Heading>}
           {children}
         </Pressable>
@@ -284,10 +305,12 @@ export function SheetOption({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.sheetOption, pressed && { backgroundColor: colors.card }]}
+      style={({ pressed }) => [styles.sheetOption, pressed && { backgroundColor: colors.hoverTint }]}
     >
       {icon}
-      <Text style={{ fontSize: theme.font.body, color: colors.text, flex: 1 }}>{label}</Text>
+      <Text style={{ fontSize: theme.font.body, color: colors.text, flex: 1, fontFamily: theme.fontFamily.bodySemiBold }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -295,66 +318,103 @@ export function SheetOption({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    paddingHorizontal: theme.space(5),
+    paddingHorizontal: theme.space(4.5),
   },
   card: {
-    borderRadius: theme.radius,
+    borderRadius: theme.radius.md,
     padding: theme.space(4),
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: theme.border,
   },
   title: {
     fontSize: theme.font.title,
-    fontWeight: '700',
+    fontFamily: theme.fontFamily.heading,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   heading: {
     fontSize: theme.font.heading,
-    fontWeight: '600',
+    fontFamily: theme.fontFamily.heading,
+    textTransform: 'uppercase',
   },
   muted: {
     fontSize: theme.font.small,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  sectionLabel: {
+    fontSize: theme.font.label,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
   },
   input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: theme.radius,
-    paddingHorizontal: theme.space(4),
-    paddingVertical: theme.space(3),
+    borderWidth: theme.border,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.space(3.5),
+    paddingVertical: theme.space(3.5),
     fontSize: theme.font.body,
+    fontFamily: theme.fontFamily.bodyMedium,
   },
   button: {
-    borderRadius: theme.radius,
-    paddingVertical: theme.space(3.5),
+    borderRadius: theme.radius.sm,
+    paddingVertical: theme.space(4),
+    paddingHorizontal: theme.space(4),
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: theme.space(2),
   },
   buttonLabel: {
-    fontSize: theme.font.body,
-    fontWeight: '600',
+    fontSize: 13,
+    fontFamily: theme.fontFamily.bodyBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  buttonArrow: {
+    fontSize: 15,
+    fontFamily: theme.fontFamily.bodyBold,
+  },
+  pillButton: {
+    borderRadius: theme.radius.pill,
+    paddingVertical: theme.space(2.25),
+    paddingHorizontal: theme.space(3.5),
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.space(1.5),
+  },
+  pillButtonLabel: {
+    fontSize: 10,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   avatar: {},
   avatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   tabs: {
     flexDirection: 'row',
-    borderRadius: theme.radius,
+    borderRadius: theme.radius.pill,
     padding: 4,
   },
   tab: {
     flex: 1,
     paddingVertical: theme.space(2.5),
-    borderRadius: theme.radius - 4,
     alignItems: 'center',
+    borderRadius: theme.radius.pill,
   },
   tabLabel: {
-    fontSize: theme.font.small,
-    fontWeight: '600',
+    fontSize: 11,
+    fontFamily: theme.fontFamily.bodySemiBold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   dropdown: {
     marginTop: theme.space(1),
-    borderRadius: theme.radius,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.border,
     overflow: 'hidden',
   },
   dropdownItem: {
@@ -364,25 +424,29 @@ const styles = StyleSheet.create({
   },
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(8, 9, 12, 0.55)',
+    backgroundColor: 'rgba(11, 12, 10, 0.72)',
     justifyContent: 'flex-end',
   },
   sheetCard: {
-    borderTopLeftRadius: theme.radius * 1.4,
-    borderTopRightRadius: theme.radius * 1.4,
+    borderTopLeftRadius: theme.radius.sheet,
+    borderTopRightRadius: theme.radius.sheet,
+    borderTopWidth: theme.border,
     padding: theme.space(5),
     paddingBottom: theme.space(8),
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
-    elevation: 8,
+  },
+  sheetGrabber: {
+    width: 40,
+    height: 4,
+    borderRadius: theme.radius.pill,
+    alignSelf: 'center',
+    marginBottom: theme.space(3),
   },
   sheetOption: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.space(3),
     paddingVertical: theme.space(3),
-    borderRadius: theme.radius,
+    borderRadius: theme.radius.sm,
     paddingHorizontal: theme.space(2),
   },
 });

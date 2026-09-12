@@ -1,0 +1,208 @@
+import { useState } from 'react';
+import { router } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { AppMark } from '@/components/AuthExtras';
+import { Button, Screen, Sheet } from '@/components/ui';
+import { useStepsConsent } from '@/lib/steps-consent';
+import { theme, useThemeColors } from '@/lib/theme';
+
+const READ_ROWS = [
+  {
+    ok: true,
+    title: 'What we read',
+    body: 'Daily step totals only — one number per day, at 22:00.',
+  },
+  {
+    ok: true,
+    title: 'Who sees it',
+    body: 'Only the leagues you join, and only after 22:00.',
+  },
+  {
+    ok: false,
+    title: 'What we never touch',
+    body: 'Location, routes, heart rate, workouts, or anything else in Health. No ads, no third parties, no data sold.',
+  },
+];
+
+const PRIVACY_NOTE = `Step League reads one number from your phone's health data: your total step count for each day. That's it — not your location, your routes, your heart rate, your workouts, or anything else Health/Health Connect tracks.
+
+That daily total is written to our database (Supabase) tied to your account, so it can be compared against the other members of leagues you choose to join. Standings only ever show yesterday's total and earlier — today's count stays private to you until the 22:00 rollup, every day, without exception.
+
+We don't run ads, and we don't have an analytics or advertising SDK that reads this data. We don't sell it, license it, or share it with any third party. It isn't used to train any model. The only people who can ever see your step totals are the other members of leagues you've personally joined, and only for days that have already locked in.
+
+If you leave a league, your past totals stay visible in that league's history the same way everyone else's do — leaving doesn't retroactively hide already-locked standings. You can revoke step access at any time from your phone's Health/Health Connect settings, or stop syncing from Step League's own Profile screen. Deleting your account deletes your step history along with it.
+
+One developer runs this app and reads this note the same way you're reading it now: plainly, and meaning every word.`;
+
+/**
+ * "Step access — in-app consent" (design screen 2u) — shown once, after
+ * onboarding-location and before the native Health Connect/HealthKit
+ * permission dialog ever appears (see the redirect guard in
+ * app/(app)/_layout.tsx and the `enabled` gate on useStepSync). Google Play
+ * and Apple both expect a plain-language explanation like this ahead of a
+ * sensitive-permission prompt, not just the bare OS dialog.
+ */
+export default function OnboardingHealth() {
+  const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
+  const { setConsentGiven } = useStepsConsent();
+  const [agreed, setAgreed] = useState(false);
+  const [notifyOptIn, setNotifyOptIn] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+
+  function handleContinue() {
+    if (!agreed) return;
+    setConsentGiven(true, notifyOptIn);
+    router.replace('/');
+  }
+
+  return (
+    <Screen style={{ paddingHorizontal: 0 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: theme.space(4.5), paddingTop: theme.space(3), paddingBottom: theme.space(4) }}
+      >
+        <AppMark size={44} />
+
+        <Text style={[styles.heading, { color: colors.text }]}>Step League needs your step count</Text>
+        <Text style={[styles.body, { color: colors.textSubtle }]}>
+          Your phone already counts your steps. We read that number once a day so your leagues have something to
+          compare. Nothing else.
+        </Text>
+
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          {READ_ROWS.map((row, i) => (
+            <View key={row.title} style={[styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+              <View style={[styles.badge, { backgroundColor: row.ok ? colors.accent : colors.danger }]}>
+                <Text style={[styles.badgeGlyph, { color: row.ok ? colors.primaryText : '#ffffff' }]}>{row.ok ? '✓' : '✕'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.rowTitle, { color: colors.text }]}>{row.title}</Text>
+                <Text style={[styles.rowBody, { color: colors.textMuted }]}>{row.body}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <Pressable onPress={() => setAgreed((v) => !v)} style={styles.checkboxRow} hitSlop={6}>
+          <View style={[styles.checkbox, { borderColor: colors.controlBorder }, agreed && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+            {agreed && <Text style={[styles.checkGlyph, { color: colors.primaryText }]}>✓</Text>}
+          </View>
+          <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+            I agree to Step League reading my daily step count.{'\n'}
+            <Text onPress={() => setPrivacyOpen(true)} style={{ color: colors.accent, fontFamily: theme.fontFamily.bodySemiBold }}>
+              Privacy note · ~210 words, plain language.
+            </Text>
+          </Text>
+        </Pressable>
+
+        <Pressable onPress={() => setNotifyOptIn((v) => !v)} style={[styles.checkboxRow, { marginTop: theme.space(3) }]} hitSlop={6}>
+          <View style={[styles.checkbox, { borderColor: colors.controlBorder }, notifyOptIn && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+            {notifyOptIn && <Text style={[styles.checkGlyph, { color: colors.primaryText }]}>✓</Text>}
+          </View>
+          <Text style={[styles.checkboxLabel, { color: colors.textMuted }]}>
+            Also send me one notification at 22:00 when scores land. Optional — asked separately later.
+          </Text>
+        </Pressable>
+      </ScrollView>
+
+      <View style={{ paddingHorizontal: theme.space(4.5), paddingBottom: insets.bottom + theme.space(3), gap: theme.space(2.5) }}>
+        <Button label="Continue" onPress={handleContinue} disabled={!agreed} arrow />
+        <Text style={[styles.footnote, { color: colors.textDim }]}>
+          Your phone will ask next. You can say no there, or change it any time in Profile.
+        </Text>
+      </View>
+
+      <Sheet visible={privacyOpen} onClose={() => setPrivacyOpen(false)} title="Privacy note">
+        <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+          <Text style={{ fontSize: 14, lineHeight: 21, fontFamily: theme.fontFamily.bodyMedium, color: colors.textSubtle }}>
+            {PRIVACY_NOTE}
+          </Text>
+        </ScrollView>
+      </Sheet>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  heading: {
+    marginTop: theme.space(5),
+    fontSize: 30,
+    lineHeight: 32,
+    fontFamily: theme.fontFamily.heading,
+    textTransform: 'uppercase',
+  },
+  body: {
+    marginTop: theme.space(3),
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: theme.fontFamily.bodyMedium,
+    maxWidth: 340,
+  },
+  card: {
+    marginTop: theme.space(5),
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.space(4),
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.space(3),
+    paddingVertical: theme.space(3.5),
+  },
+  badge: {
+    width: 24,
+    height: 24,
+    borderRadius: theme.radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  badgeGlyph: {
+    fontSize: 13,
+    fontFamily: theme.fontFamily.bodyBold,
+  },
+  rowTitle: {
+    fontSize: 14,
+    fontFamily: theme.fontFamily.bodySemiBold,
+  },
+  rowBody: {
+    marginTop: theme.space(1),
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  checkboxRow: {
+    marginTop: theme.space(5),
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.space(3),
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: theme.border + 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkGlyph: {
+    fontSize: 13,
+    fontFamily: theme.fontFamily.bodyBold,
+  },
+  checkboxLabel: {
+    flex: 1,
+    fontSize: 13.5,
+    lineHeight: 20,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  footnote: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+});

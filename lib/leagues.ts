@@ -1,5 +1,17 @@
 import { supabase } from './supabase';
-import type { LeagueAward, LeaderboardRow, League, LeagueRoundResult } from './types';
+import type {
+  LeagueAward,
+  LeaderboardRow,
+  League,
+  LeagueDailyResult,
+  LeagueMessage,
+  LeaguePlayedSummary,
+  LeagueRoundResult,
+  LeagueScoringMode,
+  PeekResult,
+  PeekStatus,
+  PublicLeaguePreview,
+} from './types';
 
 export async function listMyLeagues(): Promise<League[]> {
   const { data: userData } = await supabase.auth.getUser();
@@ -20,18 +32,51 @@ export async function listMyLeagues(): Promise<League[]> {
   return (data ?? []).map((row) => (row as unknown as { leagues: League }).leagues).filter(Boolean);
 }
 
-export async function createLeague(name: string, deadline: string): Promise<League> {
+export async function createLeague(
+  name: string,
+  deadline: string,
+  options?: { scoringMode?: LeagueScoringMode; isPublic?: boolean; winnerStakes?: string; loserStakes?: string }
+): Promise<League> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) throw new Error('Not signed in.');
 
   const { data, error } = await supabase
     .from('leagues')
-    .insert({ name, deadline, created_by: userId })
+    .insert({
+      name,
+      deadline,
+      created_by: userId,
+      scoring_mode: options?.scoringMode ?? 'total_steps',
+      is_public: options?.isPublic ?? false,
+      winner_stakes: options?.winnerStakes?.trim() || null,
+      loser_stakes: options?.loserStakes?.trim() || null,
+    })
     .select()
     .single();
   if (error) throw error;
   return data as League;
+}
+
+/** Open leagues near a city/country, or matching a search term — powers the join screen's discovery list. */
+export async function searchPublicLeagues(params: {
+  city?: string | null;
+  country?: string | null;
+  query?: string;
+}): Promise<PublicLeaguePreview[]> {
+  const { data, error } = await supabase.rpc('search_public_leagues', {
+    p_city: params.city ?? null,
+    p_country: params.country ?? null,
+    p_query: params.query?.trim() || null,
+  });
+  if (error) throw error;
+  return (data ?? []) as PublicLeaguePreview[];
+}
+
+/** One-tap join for a league found via searchPublicLeagues — no invite code needed. */
+export async function joinPublicLeague(leagueId: string): Promise<void> {
+  const { error } = await supabase.rpc('join_public_league', { p_league_id: leagueId });
+  if (error) throw error;
 }
 
 export async function previewLeague(inviteCode: string) {
@@ -48,9 +93,30 @@ export async function joinLeague(inviteCode: string): Promise<string> {
   return data as string;
 }
 
-/** Only the creator can call this, and only after the current round ended — enforced server-side too. */
-export async function restartLeague(leagueId: string, newDeadline: string): Promise<void> {
-  const { error } = await supabase.rpc('restart_league', { p_league_id: leagueId, p_new_deadline: newDeadline });
+/**
+ * Only the creator can call this, and only after the current round ended —
+ * enforced server-side too. `memberIds`, when given, is who continues into
+ * the new round (everyone else is removed from the league, the creator is
+ * always kept); omit it to keep every current member.
+ */
+export async function restartLeague(
+  leagueId: string,
+  newDeadline: string,
+  options?: { memberIds?: string[]; winnerStakes?: string; loserStakes?: string }
+): Promise<void> {
+  const { error } = await supabase.rpc('restart_league', {
+    p_league_id: leagueId,
+    p_new_deadline: newDeadline,
+    p_member_ids: options?.memberIds ?? null,
+    p_winner_stakes: options?.winnerStakes?.trim() || null,
+    p_loser_stakes: options?.loserStakes?.trim() || null,
+  });
+  if (error) throw error;
+}
+
+/** A member removes themselves from a league. The creator can't leave their own league — see leave_league() in schema.sql. */
+export async function leaveLeague(leagueId: string): Promise<void> {
+  const { error } = await supabase.rpc('leave_league', { p_league_id: leagueId });
   if (error) throw error;
 }
 
@@ -204,33 +270,178 @@ export async function getLeaderboard(leagueId: string): Promise<{
     reactionsByUser.set(r.to_user_id, forUser);
   }
 
+  const pointsByUser = await getLeagueDailyWins(leagueId, roundStart);
+
   const ranked = memberList
     .map((m) => {
-      const localToday = todayInTimezone(m.profiles?.timezone ?? 'UTC');
       const todaySteps = todayByUser.get(m.user_id) ?? 0;
       const yesterdaySteps = yesterdayByUser.get(m.user_id) ?? 0;
-      // The snapshot already includes everything through 22:00 on
-      // officialAsOf. Only fold in "today" on top of it when today is a
-      // later calendar day for this member — otherwise we'd double-count.
-      const liveExtra = officialAsOf && localToday > officialAsOf ? todaySteps : 0;
+      // Sealed once a snapshot exists: standings show exactly what the last
+      // 22:00 rollup wrote, nothing from today folded in. (This used to
+      // silently add today's live steps on top, which quietly contradicted
+      // every "today unlocks at 22:00" label in the UI — today's live totals
+      // are now only ever visible through Peek, see getLivePeek() below.)
       const reactionMap = reactionsByUser.get(m.user_id);
       return {
         user_id: m.user_id,
         display_name: m.profiles?.display_name ?? 'Unknown',
         avatar_url: m.profiles?.avatar_url ?? null,
-        total_steps: (totals.get(m.user_id) ?? 0) + liveExtra,
+        total_steps: totals.get(m.user_id) ?? 0,
         is_me: m.user_id === myId,
         todaySteps,
         deltaSinceYesterday: todaySteps - yesterdaySteps,
         reactions: reactionMap
           ? Array.from(reactionMap.entries()).map(([emoji, count]) => ({ emoji, count }))
           : [],
+        points: pointsByUser.get(m.user_id) ?? 0,
       };
     })
     .sort((a, b) => b.total_steps - a.total_steps)
     .map((row, i) => ({ ...row, rank: i + 1 }));
 
   return { rows: ranked, officialAsOf };
+}
+
+/**
+ * Per-member count of days they ranked #1 in `leaderboard_snapshots` for the
+ * current round — the "Pts" column for the daily-wins scoring mode, and a
+ * secondary stat shown regardless of mode. Derived entirely from snapshots
+ * the nightly rollup already writes, so no new table or edge function
+ * change is needed.
+ */
+export async function getLeagueDailyWins(leagueId: string, roundStart?: string): Promise<Map<string, number>> {
+  const start = roundStart ?? (await getCurrentRoundStart(leagueId)).roundStart;
+  const { data, error } = await supabase
+    .from('leaderboard_snapshots')
+    .select('user_id')
+    .eq('league_id', leagueId)
+    .eq('rank', 1)
+    .gte('snapshot_date', start);
+  if (error) throw error;
+  const points = new Map<string, number>();
+  for (const row of (data ?? []) as { user_id: string }[]) {
+    points.set(row.user_id, (points.get(row.user_id) ?? 0) + 1);
+  }
+  return points;
+}
+
+function dayFractionElapsed(timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+  return ((hour === 24 ? 0 : hour) + minute / 60) / 24;
+}
+
+/**
+ * Today's live standings for one league — what "Peek" reveals. Deliberately
+ * separate from getLeaderboard(): this shows each member's steps *today*
+ * (not the sealed round total) plus a same-day pace projection, so a peek
+ * answers "how am I doing right now" rather than duplicating the frozen
+ * table. Consumed via usePeek() below, which enforces the daily quota
+ * server-side before the caller bothers fetching this.
+ */
+export async function getLivePeek(leagueId: string): Promise<PeekResult> {
+  const { data: userData } = await supabase.auth.getUser();
+  const myId = userData.user?.id;
+
+  const { data: members, error: membersError } = await supabase
+    .from('league_members')
+    .select('user_id, profiles(display_name, avatar_url, timezone)')
+    .eq('league_id', leagueId);
+  if (membersError) throw membersError;
+
+  type PeekMemberRow = { user_id: string; profiles: { display_name: string; avatar_url: string | null; timezone: string } | null };
+  const memberList = (members ?? []) as unknown as PeekMemberRow[];
+  if (memberList.length === 0) return { rows: [], gapToFirst: null, leaderName: null };
+
+  const todayKeyByUser = new Map(memberList.map((m) => [m.user_id, todayInTimezone(m.profiles?.timezone ?? 'UTC')]));
+  const uniqueDates = Array.from(new Set(todayKeyByUser.values()));
+
+  const { data: stepsRows, error: stepsError } = await supabase
+    .from('daily_steps')
+    .select('user_id, date, steps')
+    .in('user_id', memberList.map((m) => m.user_id))
+    .in('date', uniqueDates);
+  if (stepsError) throw stepsError;
+
+  const nowByUser = new Map<string, number>();
+  for (const row of (stepsRows ?? []) as { user_id: string; date: string; steps: number }[]) {
+    if (row.date === todayKeyByUser.get(row.user_id)) nowByUser.set(row.user_id, row.steps);
+  }
+
+  const rows = memberList
+    .map((m) => {
+      const now = nowByUser.get(m.user_id) ?? 0;
+      const fraction = dayFractionElapsed(m.profiles?.timezone ?? 'UTC');
+      return {
+        user_id: m.user_id,
+        display_name: m.profiles?.display_name ?? 'Unknown',
+        avatar_url: m.profiles?.avatar_url ?? null,
+        now_steps: now,
+        // Simple same-day extrapolation, clamped so a peek taken at 00:05
+        // doesn't project someone into the millions. Real methodology, just
+        // not the "last three hours" a fancier version might use — this app
+        // doesn't store other members' hourly data to do that.
+        pace: Math.round(now / Math.max(fraction, 0.08)),
+        is_me: m.user_id === myId,
+      };
+    })
+    .sort((a, b) => b.now_steps - a.now_steps);
+
+  const leader = rows[0];
+  const me = rows.find((r) => r.is_me);
+  const gapToFirst = me && leader && !leader.is_me ? leader.now_steps - me.now_steps : me && leader && leader.is_me ? 0 : null;
+
+  return { rows, gapToFirst, leaderName: leader?.display_name ?? null };
+}
+
+/** Consumes one of today's peek allowance (1 free / 3 premium) — see use_peek() in supabase/schema.sql. */
+export async function usePeek(): Promise<{ allowed: boolean; remaining: number; isPro: boolean }> {
+  const { data, error } = await supabase.rpc('use_peek').single();
+  if (error) throw error;
+  const row = data as { allowed: boolean; remaining: number; is_pro: boolean };
+  return { allowed: row.allowed, remaining: row.remaining, isPro: row.is_pro };
+}
+
+/** Read-only peek quota check — doesn't consume one, just reports "N left today". */
+export async function getPeekStatus(): Promise<PeekStatus> {
+  const { data, error } = await supabase.rpc('peeks_remaining_today').single();
+  if (error) throw error;
+  const row = data as { remaining: number; is_pro: boolean };
+  return { remaining: row.remaining, is_pro: row.is_pro };
+}
+
+/** Every league (finished or live) the caller has ever been a member of, with their standing in each — the premium Stat History screen's league list. */
+export async function getMyLeaguesPlayed(): Promise<LeaguePlayedSummary[]> {
+  const leagues = await listMyLeagues();
+  const results = await Promise.all(
+    leagues.map(async (l) => {
+      try {
+        const { rows } = await getLeaderboard(l.id);
+        const mine = rows.find((r) => r.is_me);
+        const ended = new Date(l.deadline) < new Date(new Date().toDateString());
+        const roundStart = l.current_round_start ?? l.created_at;
+        const days = Math.max(1, Math.round((Date.parse(l.deadline) - Date.parse(roundStart)) / 86400000) + 1);
+        return {
+          league_id: l.id,
+          name: l.name,
+          memberCount: rows.length,
+          isLive: !ended,
+          rank: mine?.rank ?? 0,
+          totalSteps: mine?.total_steps ?? 0,
+          days,
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+  return results.filter((r): r is LeaguePlayedSummary => r !== null);
 }
 
 const REACTION_EMOJIS = ['🔥', '💪', '👏', '😅', '🐌'];
@@ -277,6 +488,39 @@ export async function setMyNemesis(leagueId: string, nemesisUserId: string): Pro
     .from('league_nemeses')
     .upsert({ league_id: leagueId, user_id: userId, nemesis_user_id: nemesisUserId }, { onConflict: 'league_id,user_id' });
   if (error) throw error;
+}
+
+/** Lifetime count of days this user ranked #1 in any league — the profile screen's "Wins" stat. */
+export async function getMyTotalWins(): Promise<number> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return 0;
+  const { count, error } = await supabase
+    .from('leaderboard_snapshots')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('rank', 1);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/**
+ * "Win rate" for the premium Stat History screen — the share of league-days
+ * (rows in leaderboard_snapshots, one per league you were standing in on a
+ * given night) that you finished #1 in, optionally scoped to a date range.
+ * Same underlying data as getMyTotalWins(), just with a denominator.
+ */
+export async function getMySnapshotWinStats(range?: { start?: string; end?: string }): Promise<{ total: number; wins: number }> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return { total: 0, wins: 0 };
+  let query = supabase.from('leaderboard_snapshots').select('rank').eq('user_id', userId);
+  if (range?.start) query = query.gte('snapshot_date', range.start);
+  if (range?.end) query = query.lte('snapshot_date', range.end);
+  const { data, error } = await query;
+  if (error) throw error;
+  const rows = (data ?? []) as { rank: number }[];
+  return { total: rows.length, wins: rows.filter((r) => r.rank === 1).length };
 }
 
 const AWARD_DEFS: { title: string; emoji: string; description: string }[] = [
@@ -460,4 +704,120 @@ export async function getLeagueHistory(leagueId: string): Promise<LeagueRoundRes
       .sort((a, b) => b.total_steps - a.total_steps);
     return { ...round, standings };
   });
+}
+
+const MESSAGE_PAGE_SIZE = 50;
+
+type MessageRow = {
+  id: string;
+  league_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  profiles: { display_name: string; avatar_url: string | null } | null;
+};
+
+/** Most recent messages first, then reversed to chronological order for rendering. */
+export async function getLeagueMessages(leagueId: string): Promise<LeagueMessage[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const myId = userData.user?.id;
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, league_id, user_id, body, created_at, profiles(display_name, avatar_url)')
+    .eq('league_id', leagueId)
+    .order('created_at', { ascending: false })
+    .limit(MESSAGE_PAGE_SIZE);
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as MessageRow[])
+    .map((row) => ({
+      id: row.id,
+      league_id: row.league_id,
+      user_id: row.user_id,
+      display_name: row.profiles?.display_name ?? 'Unknown',
+      avatar_url: row.profiles?.avatar_url ?? null,
+      body: row.body,
+      created_at: row.created_at,
+      is_me: row.user_id === myId,
+    }))
+    .reverse();
+}
+
+export async function sendLeagueMessage(leagueId: string, body: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+  const trimmed = body.trim();
+  if (!trimmed) return;
+
+  const { error } = await supabase
+    .from('messages')
+    .insert({ league_id: leagueId, user_id: userId, body: trimmed.slice(0, 500) });
+  if (error) throw error;
+}
+
+/**
+ * A single day's result for the 22:00 takeover screen: each member's own
+ * step count for that specific day (from daily_steps — a real, meaningful
+ * "how much did I walk today" number) ranked league-wide for the day's
+ * winner, plus each member's *cumulative* standing rank that day vs. the day
+ * before (from leaderboard_snapshots, for the ↑/↓ delta arrows). Both are
+ * derived from data the nightly rollup already writes — no new table or
+ * edge function change needed.
+ */
+export async function getLeagueDailyResult(leagueId: string, date: string): Promise<LeagueDailyResult> {
+  const { data: userData } = await supabase.auth.getUser();
+  const myId = userData.user?.id;
+
+  const previousDate = (() => {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const { data: members, error: membersError } = await supabase
+    .from('league_members')
+    .select('user_id, profiles(display_name)')
+    .eq('league_id', leagueId);
+  if (membersError) throw membersError;
+  const memberList = (members ?? []) as unknown as { user_id: string; profiles: { display_name: string } | null }[];
+  if (memberList.length === 0) return { date, winner: null, rows: [] };
+
+  const userIds = memberList.map((m) => m.user_id);
+
+  const [{ data: dayStepsRows }, { data: snapshotRows }, { data: prevSnapshotRows }] = await Promise.all([
+    supabase.from('daily_steps').select('user_id, steps').eq('date', date).in('user_id', userIds),
+    supabase
+      .from('leaderboard_snapshots')
+      .select('user_id, rank')
+      .eq('league_id', leagueId)
+      .eq('snapshot_date', date),
+    supabase
+      .from('leaderboard_snapshots')
+      .select('user_id, rank')
+      .eq('league_id', leagueId)
+      .eq('snapshot_date', previousDate),
+  ]);
+
+  const stepsByUser = new Map(((dayStepsRows ?? []) as { user_id: string; steps: number }[]).map((r) => [r.user_id, r.steps]));
+  const rankByUser = new Map(((snapshotRows ?? []) as { user_id: string; rank: number }[]).map((r) => [r.user_id, r.rank]));
+  const prevRankByUser = new Map(
+    ((prevSnapshotRows ?? []) as { user_id: string; rank: number }[]).map((r) => [r.user_id, r.rank])
+  );
+
+  const rows = memberList
+    .map((m) => ({
+      user_id: m.user_id,
+      display_name: m.profiles?.display_name ?? 'Unknown',
+      total_steps: stepsByUser.get(m.user_id) ?? 0,
+      rank: rankByUser.get(m.user_id) ?? memberList.length,
+      previousRank: prevRankByUser.get(m.user_id) ?? null,
+      is_me: m.user_id === myId,
+    }))
+    .sort((a, b) => b.total_steps - a.total_steps);
+
+  const winner = rows.length > 0 && rows[0].total_steps > 0 ? rows[0] : null;
+
+  return { date, winner, rows };
 }
