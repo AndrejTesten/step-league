@@ -174,17 +174,19 @@ export function StepCounterPage({ width }: { width: number }) {
         </Pressable>
       </View>
 
-      {syncStatus.error && (
+      {syncStatus.errorCode && (
         <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small, marginBottom: theme.space(2) }}>
-          {t('home.stepCounter.syncError', { error: syncStatus.error })}
+          {t(`home.stepCounter.syncErrors.${syncStatus.errorCode}`)}
         </Text>
       )}
 
       <Pressable onPress={() => router.push('/stats')}>
         <SectionLabel>{t('home.stepCounter.todayLabel', { date: todayLabel })}</SectionLabel>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: theme.space(2.5), marginTop: theme.space(1.5) }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: theme.space(2.5), marginTop: theme.space(1.5) }}>
           <Text style={[styles.hero, { color: colors.accent }]}>{loading ? '-' : displayedToday.toLocaleString()}</Text>
-          <Text style={[styles.stepsWord, { color: colors.textMuted }]}>{t('home.stepCounter.steps')}</Text>
+          <Text style={[styles.stepsWord, { color: colors.textMuted }]} numberOfLines={1}>
+            {t('home.stepCounter.steps')}
+          </Text>
         </View>
       </Pressable>
 

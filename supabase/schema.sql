@@ -266,8 +266,14 @@ begin
     raise exception 'Too many step syncs — please slow down.';
   end if;
 
+  -- "on commit drop" means this table is guaranteed empty here — either it
+  -- didn't exist yet, or the previous call's transaction just dropped it on
+  -- commit — so there's nothing to clear before inserting. (A `delete from
+  -- tmp_step_entries` used to sit here as a defensive no-op; Supabase
+  -- preloads pg-safeupdate on the role PostgREST/RPC calls run as, which
+  -- rejects any DELETE with no WHERE clause outright — that's what was
+  -- actually breaking every sync with "DELETE requires a where clause".)
   create temporary table if not exists tmp_step_entries (date date primary key, steps integer) on commit drop;
-  delete from tmp_step_entries;
   insert into tmp_step_entries (date, steps)
   select (e->>'date')::date, (e->>'steps')::integer
   from jsonb_array_elements(p_entries) as e;

@@ -131,7 +131,11 @@
     "stepCounter": {
       "premium": "Premium",
       "goPremium": "Go Premium",
-      "syncError": "Steps aren't syncing: {{error}}",
+      "syncErrors": {
+        "health_connect_missing": "Health Connect isn't installed. Install it from the Play Store to sync your steps.",
+        "permission_denied": "Steps permission was denied. Open Health Connect → App permissions → StepLeague and allow Steps.",
+        "unknown": "Steps aren't syncing right now. We'll keep trying."
+      },
       "todayLabel": "Today · {{date}}",
       "steps": "Steps",
       "goalPct": "{{percent}}% of {{goal}}",

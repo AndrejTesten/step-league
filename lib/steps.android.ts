@@ -9,7 +9,7 @@ import {
 } from 'react-native-health-connect';
 
 import { DAYS_TO_BACKFILL, dateKeyInTimezone, upsertDailySteps } from './steps-shared';
-import { reportSyncFailure, reportSyncSuccess } from './sync-status';
+import { reportSyncFailure, reportSyncSuccess, UserFacingSyncError } from './sync-status';
 import { startOfDayInTimezone } from './timezone';
 
 /**
@@ -33,7 +33,7 @@ import { startOfDayInTimezone } from './timezone';
 async function ensureStepsAccess(): Promise<void> {
   const status = await getSdkStatus();
   if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
-    throw new Error('Health Connect is not installed on this device — install it from the Play Store.');
+    throw new UserFacingSyncError('health_connect_missing', 'Health Connect is not installed on this device.');
   }
   await initialize();
   const isStepsGrant = (p: { recordType?: string; accessType?: string }) =>
@@ -55,7 +55,7 @@ async function ensureStepsAccess(): Promise<void> {
     hasStepsAccess = requested.some(isStepsGrant);
   }
   if (!hasStepsAccess) {
-    throw new Error('Steps permission was denied — open Health Connect > App permissions > StepLeague and allow Steps.');
+    throw new UserFacingSyncError('permission_denied', 'Steps permission was denied.');
   }
 }
 
@@ -94,10 +94,11 @@ export async function syncSteps(timezone: string, daysToBackfill: number = DAYS_
   } catch (err) {
     // Sync failures shouldn't crash the app — just means stale numbers
     // until the next successful sync. reportSyncFailure surfaces *why* on
-    // the home screen instead of only in a console.warn nobody sees.
+    // the home screen (as a code, not this raw message — see sync-status.ts)
+    // instead of only in a console.warn nobody sees.
     const message = err instanceof Error ? err.message : String(err);
     console.warn('[steps.android] sync failed:', message);
-    reportSyncFailure(message);
+    reportSyncFailure(err);
   }
 }
 

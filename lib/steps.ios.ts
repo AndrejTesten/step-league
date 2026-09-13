@@ -57,10 +57,11 @@ export async function syncSteps(timezone: string, daysToBackfill: number = DAYS_
   } catch (err) {
     // Sync failures shouldn't crash the app — just means stale numbers
     // until the next successful sync. reportSyncFailure surfaces *why* on
-    // the home screen instead of only in a console.warn nobody sees.
+    // the home screen (as a code, not this raw message — see sync-status.ts)
+    // instead of only in a console.warn nobody sees.
     const message = err instanceof Error ? err.message : String(err);
     console.warn('[steps.ios] sync failed:', message);
-    reportSyncFailure(message);
+    reportSyncFailure(err);
   }
 }
 

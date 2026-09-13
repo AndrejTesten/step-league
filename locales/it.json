@@ -131,7 +131,11 @@
     "stepCounter": {
       "premium": "Premium",
       "goPremium": "Passa a Premium",
-      "syncError": "I passi non si sincronizzano: {{error}}",
+      "syncErrors": {
+        "health_connect_missing": "Health Connect non è installato. Installalo dal Play Store per sincronizzare i tuoi passi.",
+        "permission_denied": "Il permesso per i passi è stato negato. Apri Health Connect → Autorizzazioni app → StepLeague e consenti i passi.",
+        "unknown": "I passi non si sincronizzano al momento. Continueremo a provare."
+      },
       "todayLabel": "Oggi · {{date}}",
       "steps": "Passi",
       "goalPct": "{{percent}}% di {{goal}}",
