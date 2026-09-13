@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, Button, Input, Screen, SearchableSelect, SectionLabel, Tabs } from '@/components/ui';
@@ -154,10 +154,12 @@ export default function Profile() {
   }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Screen>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + theme.space(8) }}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.identity}>
           <Pressable onPress={handleChangePhoto} disabled={uploadingPhoto}>
@@ -329,6 +331,7 @@ export default function Profile() {
         </Pressable>
       </ScrollView>
     </Screen>
+    </KeyboardAvoidingView>
   );
 }
 

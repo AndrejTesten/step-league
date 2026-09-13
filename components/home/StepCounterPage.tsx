@@ -243,13 +243,13 @@ export function StepCounterPage({ width }: { width: number }) {
       </View>
 
       <View style={[styles.countdownCard, { borderColor: colors.controlBorder }]}>
-        <View>
+        <View style={{ flex: 1 }}>
           <SectionLabel>{t('home.stepCounter.scoresUnlockIn')}</SectionLabel>
           <Text style={[styles.countdownCaption, { color: colors.textSubtle }]}>
             {t('home.stepCounter.leaguesWaiting', { count: leagueCount })}
           </Text>
         </View>
-        <Text style={[styles.countdownClock, { color: colors.accent }]}>{clock}</Text>
+        <Text style={[styles.countdownClock, { color: colors.accent, flexShrink: 0 }]}>{clock}</Text>
       </View>
 
       {yesterday && (

@@ -86,10 +86,10 @@ export default function ThemePicker() {
       >
         {previewing && (
           <View style={[styles.previewBanner, { borderColor: colors.accent, backgroundColor: colors.accentWash }]}>
-            <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodySemiBold, color: colors.accent }}>
+            <Text style={{ flex: 1, fontSize: 12, fontFamily: theme.fontFamily.bodySemiBold, color: colors.accent }}>
               {t('themePicker.previewing', { theme: colorThemeLabel(previewing), seconds: secondsLeft })}
             </Text>
-            <Pressable onPress={() => router.push('/premium')} hitSlop={6}>
+            <Pressable onPress={() => router.push('/premium')} hitSlop={6} style={{ flexShrink: 0 }}>
               <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodyBold, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.accent }}>
                 {t('themePicker.getPremium')}
               </Text>

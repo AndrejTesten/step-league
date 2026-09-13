@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DatePickerField } from '@/components/DatePickerField';
@@ -82,6 +82,7 @@ export default function CreateLeague() {
   }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Screen>
       <ScrollView
         contentContainerStyle={{
@@ -181,6 +182,7 @@ export default function CreateLeague() {
       <Button label={t('leagues.create.submit')} onPress={handleCreate} loading={loading} arrow />
       </ScrollView>
     </Screen>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Muted, SearchableSelect, Screen, Title } from '@/components/ui';
@@ -69,6 +69,7 @@ export default function OnboardingLocation() {
   }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Screen style={{ paddingTop: theme.space(14), gap: theme.space(4) }}>
       <View>
         <Title>{t('onboarding.location.heading')}</Title>
@@ -104,5 +105,6 @@ export default function OnboardingLocation() {
         <Button label={t('common.continue')} onPress={handleSave} loading={saving} disabled={!country || !city} />
       </View>
     </Screen>
+    </KeyboardAvoidingView>
   );
 }

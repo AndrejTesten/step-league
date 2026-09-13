@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Screen, SectionLabel } from '@/components/ui';
@@ -90,6 +90,7 @@ export default function JoinLeague() {
   const boxes = Array.from({ length: INVITE_CODE_LENGTH }, (_, i) => code[i] ?? '');
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Screen>
       <ScrollView
         contentContainerStyle={{
@@ -202,6 +203,7 @@ export default function JoinLeague() {
         </View>
       </ScrollView>
     </Screen>
+    </KeyboardAvoidingView>
   );
 }
 

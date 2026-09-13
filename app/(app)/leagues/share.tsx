@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useTranslation } from 'react-i18next';
-import { Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 
@@ -143,10 +143,12 @@ export default function ShareResults() {
   }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Screen>
       <ScrollView
         contentContainerStyle={{ paddingTop: theme.space(4), paddingBottom: insets.bottom + theme.space(6), gap: theme.space(4) }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <View ref={cardRef} collapsable={false} style={[styles.shareCard, { backgroundColor: colors.accent }]}>
           <View style={styles.shareCardHeader}>
@@ -273,6 +275,7 @@ export default function ShareResults() {
         </Pressable>
       </ScrollView>
     </Screen>
+    </KeyboardAvoidingView>
   );
 }
 

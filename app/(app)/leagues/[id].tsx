@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DatePickerField } from '@/components/DatePickerField';
@@ -265,6 +265,7 @@ export default function LeagueDetail() {
   }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Screen>
       <View style={styles.header}>
         <View style={{ flex: 1, gap: theme.space(1.5) }}>
@@ -332,7 +333,7 @@ export default function LeagueDetail() {
 
       {!ended && (
         <View style={[styles.countdownCard, { backgroundColor: colors.card, marginBottom: theme.space(4) }]}>
-          <View>
+          <View style={{ flex: 1 }}>
             <SectionLabel>
               {officialAsOf
                 ? t('leagues.detail.showingDate', { date: new Date(officialAsOf).toLocaleDateString(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' }) })
@@ -340,7 +341,7 @@ export default function LeagueDetail() {
             </SectionLabel>
             <Text style={[styles.countdownCaption, { color: colors.textDim }]}>{t('leagues.detail.unlocksAt2200')}</Text>
           </View>
-          <Text style={[styles.countdownClock, { color: colors.accent }]}>{clock}</Text>
+          <Text style={[styles.countdownClock, { color: colors.accent, flexShrink: 0 }]}>{clock}</Text>
         </View>
       )}
 
@@ -735,6 +736,7 @@ export default function LeagueDetail() {
         </View>
       </Sheet>
     </Screen>
+    </KeyboardAvoidingView>
   );
 }
 
