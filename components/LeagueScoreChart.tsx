@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 
 import { Muted } from '@/components/ui';
@@ -36,6 +37,7 @@ function Segment({ x1, y1, x2, y2, color, width }: { x1: number; y1: number; x2:
 
 /** Pure-View line chart (no SVG/chart-library dependency) of cumulative steps per member. */
 export function LeagueScoreChart({ series }: { series: LeagueScoreSeries }) {
+  const { t, i18n } = useTranslation();
   const colors = useThemeColors();
   const [width, setWidth] = useState(0);
 
@@ -46,7 +48,7 @@ export function LeagueScoreChart({ series }: { series: LeagueScoreSeries }) {
   if (series.dates.length < 2 || series.members.length === 0) {
     return (
       <View style={{ paddingVertical: theme.space(6), alignItems: 'center' }}>
-        <Muted>Not enough days recorded yet to draw a graph.</Muted>
+        <Muted>{t('leagues.chart.notEnoughData')}</Muted>
       </View>
     );
   }
@@ -89,8 +91,8 @@ export function LeagueScoreChart({ series }: { series: LeagueScoreSeries }) {
           })}
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: theme.space(1) }}>
-        <Muted style={styles.axisLabel}>{formatShortDate(series.dates[0])}</Muted>
-        <Muted style={styles.axisLabel}>{formatShortDate(series.dates[n - 1])}</Muted>
+        <Muted style={styles.axisLabel}>{formatShortDate(series.dates[0], i18n.language)}</Muted>
+        <Muted style={styles.axisLabel}>{formatShortDate(series.dates[n - 1], i18n.language)}</Muted>
       </View>
 
       <View style={styles.legend}>
@@ -99,7 +101,7 @@ export function LeagueScoreChart({ series }: { series: LeagueScoreSeries }) {
             <View style={[styles.legendDot, { backgroundColor: PALETTE[i % PALETTE.length] }]} />
             <Text style={[styles.legendLabel, { color: m.is_me ? colors.text : colors.textMuted }]} numberOfLines={1}>
               {m.display_name}
-              {m.is_me ? ' (you)' : ''}
+              {m.is_me ? t('leagues.chart.youSuffix') : ''}
             </Text>
           </View>
         ))}
@@ -108,8 +110,8 @@ export function LeagueScoreChart({ series }: { series: LeagueScoreSeries }) {
   );
 }
 
-function formatShortDate(dateKey: string): string {
-  return new Date(`${dateKey}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function formatShortDate(dateKey: string, locale: string): string {
+  return new Date(`${dateKey}T00:00:00Z`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 const styles = StyleSheet.create({

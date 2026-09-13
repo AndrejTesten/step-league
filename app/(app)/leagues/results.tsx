@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,6 +18,7 @@ const LIME = '#ccff33';
  * this is the app's one deliberate inversion, meant to stay rare and loud.
  */
 export default function LeagueResults() {
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const { id, date, name } = useLocalSearchParams<{ id: string; date: string; name?: string }>();
   const [result, setResult] = useState<LeagueDailyResult | null>(null);
@@ -31,7 +33,7 @@ export default function LeagueResults() {
   const myRow = result?.rows.find((r) => r.is_me);
 
   const dateLabel = date
-    ? new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(
+    ? new Intl.DateTimeFormat(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' }).format(
         new Date(`${date}T00:00:00`)
       )
     : '';
@@ -44,13 +46,13 @@ export default function LeagueResults() {
             {dateLabel} · {name ?? ''}
           </Text>
           <Text style={styles.clockNumber}>22:00</Text>
-          <Text style={styles.title}>Scores are in</Text>
+          <Text style={styles.title}>{t('leagues.results.scoresAreIn')}</Text>
         </View>
 
         {result?.winner && (
           <View style={styles.winnerCard}>
             <View>
-              <Text style={styles.winnerEyebrow}>Today's winner</Text>
+              <Text style={styles.winnerEyebrow}>{t('leagues.results.todaysWinner')}</Text>
               <Text style={styles.winnerName}>{result.winner.display_name}</Text>
             </View>
             <Text style={styles.winnerSteps}>{result.winner.total_steps.toLocaleString()}</Text>
@@ -67,7 +69,7 @@ export default function LeagueResults() {
                   <Text style={[styles.rowName, row.is_me && styles.rowMineTextBold]}>{row.display_name}</Text>
                   {delta !== 0 && (
                     <Text style={[styles.rowDelta, row.is_me && styles.rowMineText]}>
-                      {delta > 0 ? `↑ ${delta}` : `↓ ${Math.abs(delta)}`}
+                      {delta > 0 ? t('leagues.results.deltaUp', { count: delta }) : t('leagues.results.deltaDown', { count: Math.abs(delta) })}
                     </Text>
                   )}
                 </View>
@@ -79,33 +81,31 @@ export default function LeagueResults() {
 
         {myRow && (
           <Text style={styles.blurb}>
-            You walked {myRow.total_steps.toLocaleString()} today
-            {myRow.previousRank != null && myRow.previousRank !== myRow.rank
-              ? myRow.previousRank > myRow.rank
-                ? ` — you moved up to ${ordinal(myRow.rank)}.`
-                : ` — you're now ${ordinal(myRow.rank)}.`
-              : '.'}
+            {(() => {
+              const steps = myRow.total_steps.toLocaleString();
+              if (myRow.previousRank != null && myRow.previousRank !== myRow.rank) {
+                const ordinalRank = t('home.stepCounter.rankOrdinal', { count: myRow.rank, ordinal: true });
+                return myRow.previousRank > myRow.rank
+                  ? t('leagues.results.walkedMovedUp', { steps, rank: ordinalRank })
+                  : t('leagues.results.walkedNowRank', { steps, rank: ordinalRank });
+              }
+              return t('leagues.results.walkedToday', { steps });
+            })()}
           </Text>
         )}
 
         <View style={styles.actions}>
           <Pressable style={styles.primaryButton} onPress={() => id && router.replace(`/leagues/${id}`)}>
-            <Text style={styles.primaryButtonText}>Open league</Text>
+            <Text style={styles.primaryButtonText}>{t('leagues.results.openLeague')}</Text>
             <Text style={styles.primaryButtonArrow}>→</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={() => id && router.replace(`/leagues/${id}`)}>
-            <Text style={styles.secondaryButtonText}>Say something in chat</Text>
+            <Text style={styles.secondaryButtonText}>{t('leagues.results.sayInChat')}</Text>
           </Pressable>
         </View>
       </ScrollView>
     </View>
   );
-}
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
 const styles = StyleSheet.create({

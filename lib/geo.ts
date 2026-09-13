@@ -20,6 +20,19 @@ export async function fetchCountries(): Promise<string[]> {
   return names;
 }
 
+// countriesnow.space's city lists come straight from a geographic admin-
+// division dataset, not a "notable cities" list — some countries' data
+// includes sub-municipality administrative units alongside the real city
+// (e.g. Slovenia lists "Ljubljana" itself *and* several of its internal
+// districts as separate "cities": "Opčina Ljubljana-Bežigrad", "Opčina
+// Ljubljana-Šiška", ...). There's no population field to filter by "the
+// biggest cities" — that would need a different, much larger dataset — so
+// this strips the specific administrative-unit prefixes known to leak into
+// results like that, and drops exact-duplicate names. Combined with
+// SearchableSelect's prefix-only matching (see components/ui.tsx), typing
+// a real city name like "Ljubljana" now surfaces exactly that one city.
+const ADMIN_UNIT_PREFIXES = ['Opčina ', 'Občina ', 'Opština '];
+
 export async function fetchCitiesForCountry(country: string): Promise<string[]> {
   const cached = citiesCache.get(country);
   if (cached) return cached;
@@ -31,7 +44,17 @@ export async function fetchCitiesForCountry(country: string): Promise<string[]> 
   if (!res.ok) throw new Error('Could not load cities for that country.');
   const json = await res.json();
   if (json.error) throw new Error('Could not load cities for that country.');
-  const cities = (json.data as string[]).sort((a, b) => a.localeCompare(b));
+
+  const seen = new Set<string>();
+  const cities: string[] = [];
+  for (const raw of (json.data as string[]).sort((a, b) => a.localeCompare(b))) {
+    if (ADMIN_UNIT_PREFIXES.some((prefix) => raw.startsWith(prefix))) continue;
+    const key = raw.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cities.push(raw);
+  }
+
   citiesCache.set(country, cities);
   return cities;
 }

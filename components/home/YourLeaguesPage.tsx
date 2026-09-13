@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Screen, SectionLabel, Title } from '@/components/ui';
@@ -16,6 +17,7 @@ function isLeagueEnded(league: League): boolean {
 }
 
 export function YourLeaguesPage({ width }: { width: number }) {
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
   const { profile } = useSession();
@@ -61,13 +63,13 @@ export function YourLeaguesPage({ width }: { width: number }) {
   return (
     <Screen style={{ width, paddingTop: theme.space(14) }}>
       <View style={{ gap: theme.space(3.5), marginBottom: theme.space(4) }}>
-        <Title>Leagues</Title>
+        <Title>{t('home.yourLeagues.title')}</Title>
         <View style={{ flexDirection: 'row', gap: theme.space(2) }}>
           <View style={{ flex: 1 }}>
-            <Button label="Create league" onPress={() => router.push('/leagues/create')} />
+            <Button label={t('home.yourLeagues.createLeague')} onPress={() => router.push('/leagues/create')} />
           </View>
           <View style={{ flex: 1 }}>
-            <Button label="Join with code" variant="secondary" onPress={() => router.push('/leagues/join')} />
+            <Button label={t('home.yourLeagues.joinWithCode')} variant="secondary" onPress={() => router.push('/leagues/join')} />
           </View>
         </View>
       </View>
@@ -90,10 +92,10 @@ export function YourLeaguesPage({ width }: { width: number }) {
           !loading ? (
             <View style={{ paddingVertical: theme.space(4) }}>
               <Text style={{ color: colors.text, fontFamily: theme.fontFamily.heading, fontSize: theme.font.heading }}>
-                No leagues yet
+                {t('home.yourLeagues.emptyTitle')}
               </Text>
               <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium, marginTop: theme.space(1) }}>
-                Create one and send the invite code to your friends.
+                {t('home.yourLeagues.emptyBody')}
               </Text>
             </View>
           ) : null
@@ -120,32 +122,40 @@ export function YourLeaguesPage({ width }: { width: number }) {
                 {item.name}
               </Text>
               <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodyMedium, color: item.ended ? colors.textDim : colors.textMuted }}>
-                {item.memberCount} member{item.memberCount === 1 ? '' : 's'} ·{' '}
-                {item.ended ? 'finished' : 'ends'}{' '}
-                {new Date(item.deadline).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                {item.ended
+                  ? t('home.yourLeagues.membersFinishedOn', {
+                      count: item.memberCount,
+                      date: new Date(item.deadline).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+                    })
+                  : t('home.yourLeagues.membersEndsOn', {
+                      count: item.memberCount,
+                      date: new Date(item.deadline).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+                    })}
               </Text>
               {item.won ? (
                 <View style={[styles.pill, { backgroundColor: colors.accent, alignSelf: 'flex-start' }]}>
-                  <Text style={[styles.pillText, { color: colors.primaryText }]}>You won</Text>
+                  <Text style={[styles.pillText, { color: colors.primaryText }]}>{t('home.yourLeagues.youWon')}</Text>
                 </View>
               ) : !item.ended ? (
                 <View style={[styles.pill, { backgroundColor: colors.accentChip, alignSelf: 'flex-start' }]}>
-                  <Text style={[styles.pillText, { color: colors.accent }]}>Sealed · {clock.split(':').slice(0, 2).join(':')} left</Text>
+                  <Text style={[styles.pillText, { color: colors.accent }]}>
+                    {t('home.yourLeagues.sealedLeft', { time: clock.split(':').slice(0, 2).join(':') })}
+                  </Text>
                 </View>
               ) : null}
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={{ fontSize: 40, lineHeight: 36, fontFamily: theme.fontFamily.heading, color: item.won ? colors.accent : colors.text, fontVariant: ['tabular-nums'] }}>
-                {item.myRank ?? '—'}
+                {item.myRank ?? '-'}
               </Text>
-              <SectionLabel style={{ marginTop: theme.space(1) }}>Of {item.memberCount}</SectionLabel>
+              <SectionLabel style={{ marginTop: theme.space(1) }}>{t('home.yourLeagues.ofCount', { count: item.memberCount })}</SectionLabel>
             </View>
           </Pressable>
         )}
         ListFooterComponent={
           rows.length > 0 ? (
             <Text style={{ marginTop: theme.space(3), maxWidth: 300, fontSize: 12, lineHeight: 18, color: colors.textDim, fontFamily: theme.fontFamily.bodyMedium }}>
-              Tables always show yesterday. Today's rows unlock at 22:00.
+              {t('home.yourLeagues.footerNote')}
             </Text>
           ) : null
         }

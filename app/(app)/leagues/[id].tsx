@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,12 +44,12 @@ function defaultNewDeadline() {
   return d;
 }
 
-const VIEW_OPTIONS: { value: 'list' | 'graph'; label: string }[] = [
-  { value: 'list', label: 'List' },
-  { value: 'graph', label: 'Graph' },
-];
-
 export default function LeagueDetail() {
+  const { t, i18n } = useTranslation();
+  const VIEW_OPTIONS: { value: 'list' | 'graph'; label: string }[] = [
+    { value: 'list', label: t('leagues.detail.viewList') },
+    { value: 'graph', label: t('leagues.detail.viewGraph') },
+  ];
   const colors = useThemeColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -101,7 +102,7 @@ export default function LeagueDetail() {
       setLeague(lg);
       setHistory(historyResult);
     } catch (e) {
-      setLoadError(getErrorMessage(e, 'Could not load this league.'));
+      setLoadError(getErrorMessage(e, t('leagues.detail.errors.loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -205,9 +206,11 @@ export default function LeagueDetail() {
   async function handleInvite() {
     if (!league) return;
     await Share.share({
-      message: `Join my step league "${league.name}" on StepLeague! Use code ${league.invite_code} — ends ${new Date(
-        league.deadline
-      ).toLocaleDateString()}.`,
+      message: t('leagues.detail.inviteMessage', {
+        name: league.name,
+        code: league.invite_code,
+        date: new Date(league.deadline).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+      }),
     });
   }
 
@@ -240,7 +243,7 @@ export default function LeagueDetail() {
       setRestarting(false);
       await load();
     } catch (e) {
-      setRestartError(getErrorMessage(e, 'Could not start a new round.'));
+      setRestartError(getErrorMessage(e, t('leagues.detail.errors.restartFailed')));
     } finally {
       setRestartLoading(false);
     }
@@ -255,7 +258,7 @@ export default function LeagueDetail() {
       setExitSheetOpen(false);
       router.replace('/');
     } catch (e) {
-      setExitError(getErrorMessage(e, 'Could not leave this league.'));
+      setExitError(getErrorMessage(e, t('leagues.detail.errors.exitFailed')));
     } finally {
       setExiting(false);
     }
@@ -267,8 +270,14 @@ export default function LeagueDetail() {
         <View style={{ flex: 1, gap: theme.space(1.5) }}>
           <Text style={[styles.leagueName, { color: colors.text }]}>{league?.name ?? '…'}</Text>
           <Text style={[styles.leagueMeta, { color: colors.textMuted }]}>
-            {rows.length} members · {ended ? 'finished' : `ends ${league ? new Date(league.deadline).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : ''}`}
-            {league ? ` · ${league.scoring_mode === 'daily_wins' ? 'daily wins' : 'total steps'}` : ''}
+            {t('leagues.detail.membersCount', { count: rows.length })}
+            {' · '}
+            {ended
+              ? t('leagues.detail.finished')
+              : league
+                ? t('leagues.detail.endsOn', { date: new Date(league.deadline).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }) })
+                : ''}
+            {league ? ` · ${league.scoring_mode === 'daily_wins' ? t('leagues.detail.scoringDailyWins') : t('leagues.detail.scoringTotalSteps')}` : ''}
           </Text>
         </View>
         {!ended && (
@@ -281,7 +290,7 @@ export default function LeagueDetail() {
               style={({ pressed }) => [styles.inviteButton, { borderColor: pressed ? colors.accent : colors.controlBorder }]}
             >
               <Text style={{ fontSize: 10, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textMuted }}>
-                Peek
+                {t('leagues.detail.peek')}
               </Text>
             </Pressable>
             <Pressable
@@ -289,7 +298,7 @@ export default function LeagueDetail() {
               style={({ pressed }) => [styles.inviteButton, { borderColor: pressed ? colors.accent : colors.controlBorder }]}
             >
               <Text style={{ fontSize: 10, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textMuted }}>
-                Invite
+                {t('leagues.detail.invite')}
               </Text>
             </Pressable>
           </View>
@@ -300,7 +309,7 @@ export default function LeagueDetail() {
         <View style={[styles.stakesCard, { backgroundColor: colors.card, borderColor: colors.borderStrong }]}>
           {league?.winner_stakes && (
             <Text style={{ fontSize: 12.5, lineHeight: 18, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>
-              <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, color: colors.accent }}>Winner gets: </Text>
+              <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, color: colors.accent }}>{t('leagues.detail.winnerGets')} </Text>
               {league.winner_stakes}
             </Text>
           )}
@@ -314,7 +323,7 @@ export default function LeagueDetail() {
                 color: colors.text,
               }}
             >
-              <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, color: colors.textMuted }}>Loser has to: </Text>
+              <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, color: colors.textMuted }}>{t('leagues.detail.loserHasTo')} </Text>
               {league.loser_stakes}
             </Text>
           )}
@@ -326,10 +335,10 @@ export default function LeagueDetail() {
           <View>
             <SectionLabel>
               {officialAsOf
-                ? `Showing ${new Date(officialAsOf).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}`
-                : 'Live steps'}
+                ? t('leagues.detail.showingDate', { date: new Date(officialAsOf).toLocaleDateString(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' }) })
+                : t('leagues.detail.liveSteps')}
             </SectionLabel>
-            <Text style={[styles.countdownCaption, { color: colors.textDim }]}>Today unlocks at 22:00</Text>
+            <Text style={[styles.countdownCaption, { color: colors.textDim }]}>{t('leagues.detail.unlocksAt2200')}</Text>
           </View>
           <Text style={[styles.countdownClock, { color: colors.accent }]}>{clock}</Text>
         </View>
@@ -348,11 +357,11 @@ export default function LeagueDetail() {
       {view === 'graph' ? (
         <View style={{ paddingBottom: insets.bottom }}>
           {scoreLoading || !scoreSeries ? (
-            <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>Loading graph…</Text>
+            <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>{t('leagues.detail.loadingGraph')}</Text>
           ) : (
             <View style={[styles.card, { backgroundColor: colors.card }]}>
               <Text style={{ fontFamily: theme.fontFamily.heading, fontSize: theme.font.heading, color: colors.text, marginBottom: theme.space(2), textTransform: 'uppercase' }}>
-                League score
+                {t('leagues.detail.leagueScore')}
               </Text>
               <LeagueScoreChart series={scoreSeries} />
             </View>
@@ -369,13 +378,13 @@ export default function LeagueDetail() {
                 <View>
                   {winner && (
                     <View style={[styles.finalPanel, { backgroundColor: colors.accent }]}>
-                      <Text style={styles.finalEyebrow}>Final standings · winner</Text>
+                      <Text style={styles.finalEyebrow}>{t('leagues.detail.finalStandingsWinner')}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: theme.space(3), marginTop: theme.space(2.5) }}>
                         <Text style={styles.finalWinnerName}>{winner.display_name}</Text>
                         <View style={{ alignItems: 'flex-end' }}>
                           <Text style={styles.finalWinnerSteps}>{winner.total_steps.toLocaleString()}</Text>
                           <Text style={styles.finalWinnerMeta}>
-                            {winner.points} daily win{winner.points === 1 ? '' : 's'}
+                            {t('leagues.detail.dailyWinsCount', { count: winner.points })}
                           </Text>
                         </View>
                       </View>
@@ -385,23 +394,23 @@ export default function LeagueDetail() {
               ) : (
                 rows.length > 1 && (
                   <Text style={{ fontSize: 11, color: colors.textDim, fontFamily: theme.fontFamily.bodyMedium, marginBottom: theme.space(2) }}>
-                    Hold a name to react to it
+                    {t('leagues.detail.holdToReact')}
                   </Text>
                 )
               )}
 
               <View style={[styles.tableHeader, { borderBottomColor: colors.border }]}>
                 <Text style={[styles.tableHeaderCell, { width: 26, color: colors.textDim }]}>#</Text>
-                <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>Member</Text>
-                <Text style={[styles.tableHeaderCell, { width: 70, textAlign: 'right', color: colors.textDim }]}>Steps</Text>
-                <Text style={[styles.tableHeaderCell, { width: 40, textAlign: 'right', color: colors.textDim }]}>Pts</Text>
+                <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>{t('leagues.detail.columnMember')}</Text>
+                <Text style={[styles.tableHeaderCell, { width: 70, textAlign: 'right', color: colors.textDim }]}>{t('home.leaderboards.columnSteps')}</Text>
+                <Text style={[styles.tableHeaderCell, { width: 40, textAlign: 'right', color: colors.textDim }]}>{t('leagues.detail.columnPoints')}</Text>
               </View>
             </View>
           }
           ListEmptyComponent={
             !loading ? (
               <Text style={{ paddingVertical: theme.space(4), color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>
-                No steps recorded yet — open the app on your phone with Health access granted.
+                {t('leagues.detail.noStepsRecorded')}
               </Text>
             ) : null
           }
@@ -425,7 +434,7 @@ export default function LeagueDetail() {
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.space(2.5) }}>
                     <Avatar name={item.display_name} uri={item.avatar_url} size={26} variant={mine ? 'accent' : 'default'} />
                     <Text style={[styles.memberName, { color: mine ? colors.accent : colors.text }]} numberOfLines={1}>
-                      {mine ? 'You' : item.display_name}
+                      {mine ? t('common.you') : item.display_name}
                     </Text>
                   </View>
                   <Text style={[styles.stepsCell, { color: mine ? colors.accent : colors.text }]}>
@@ -469,27 +478,27 @@ export default function LeagueDetail() {
                 <View style={{ paddingTop: theme.space(4), gap: theme.space(3) }}>
                   {isCreator ? (
                     !restarting ? (
-                      <Button label="Rematch — new league" onPress={handleStartRestart} arrow />
+                      <Button label={t('leagues.detail.rematchNewLeague')} onPress={handleStartRestart} arrow />
                     ) : (
                       <View style={{ gap: theme.space(3) }}>
-                        <SectionLabel>New end date</SectionLabel>
+                        <SectionLabel>{t('leagues.detail.newEndDate')}</SectionLabel>
                         <DatePickerField value={newDeadline} onChange={setNewDeadline} minimumDate={new Date()} />
 
-                        <SectionLabel style={{ marginTop: theme.space(2) }}>Stakes (optional)</SectionLabel>
+                        <SectionLabel style={{ marginTop: theme.space(2) }}>{t('leagues.create.stakesLabel')}</SectionLabel>
                         <Input
-                          placeholder="Winner gets… e.g. picks the next restaurant"
+                          placeholder={t('leagues.create.winnerStakesPlaceholder')}
                           value={restartWinnerStakes}
                           onChangeText={setRestartWinnerStakes}
                           maxLength={140}
                         />
                         <Input
-                          placeholder="Loser has to… e.g. buys coffee for a week"
+                          placeholder={t('leagues.create.loserStakesPlaceholder')}
                           value={restartLoserStakes}
                           onChangeText={setRestartLoserStakes}
                           maxLength={140}
                         />
 
-                        <SectionLabel style={{ marginTop: theme.space(2) }}>Who's playing this round</SectionLabel>
+                        <SectionLabel style={{ marginTop: theme.space(2) }}>{t('leagues.detail.whosPlaying')}</SectionLabel>
                         <View style={{ gap: theme.space(2) }}>
                           {rows.map((r) => {
                             const checked = restartMemberIds.has(r.user_id);
@@ -512,8 +521,8 @@ export default function LeagueDetail() {
                                 </View>
                                 <Avatar name={r.display_name} uri={r.avatar_url} size={26} />
                                 <Text style={{ flex: 1, fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>
-                                  {isSelf ? 'You' : r.display_name}
-                                  {isSelf ? ' (always in)' : ''}
+                                  {isSelf ? t('common.you') : r.display_name}
+                                  {isSelf ? t('leagues.detail.alwaysIn') : ''}
                                 </Text>
                               </Pressable>
                             );
@@ -525,21 +534,21 @@ export default function LeagueDetail() {
                         )}
                         <View style={{ flexDirection: 'row', gap: theme.space(3) }}>
                           <View style={{ flex: 1 }}>
-                            <Button label="Cancel" variant="secondary" onPress={() => setRestarting(false)} />
+                            <Button label={t('common.cancel')} variant="secondary" onPress={() => setRestarting(false)} />
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Button label="Confirm" onPress={handleConfirmRestart} loading={restartLoading} />
+                            <Button label={t('leagues.detail.confirm')} onPress={handleConfirmRestart} loading={restartLoading} />
                           </View>
                         </View>
                       </View>
                     )
                   ) : (
                     <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>
-                      Waiting for the league owner to start a new round.
+                      {t('leagues.detail.waitingForOwner')}
                     </Text>
                   )}
                   <Button
-                    label="Share final table"
+                    label={t('leagues.detail.shareFinalTable')}
                     variant="secondary"
                     onPress={() => id && router.push({ pathname: '/leagues/share', params: { id } })}
                   />
@@ -548,19 +557,27 @@ export default function LeagueDetail() {
 
               {!ended && myRow && (
                 <Pressable onPress={() => setNemesisSheetOpen(true)} style={[styles.rivalRow, { backgroundColor: colors.card }]}>
-                  <SectionLabel>Rival</SectionLabel>
+                  <SectionLabel>{t('leagues.detail.rival')}</SectionLabel>
                   {nemesisRow ? (
                     <Text style={{ marginTop: theme.space(1.5), fontFamily: theme.fontFamily.heading, fontSize: 17, color: colors.text }}>
                       {nemesisRow.display_name}
                       <Text style={{ fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>
                         {' '}
-                        · {Math.abs(myRow.total_steps - nemesisRow.total_steps).toLocaleString()} steps{' '}
-                        {myRow.total_steps >= nemesisRow.total_steps ? 'ahead' : 'behind'}
+                        ·{' '}
+                        {myRow.total_steps >= nemesisRow.total_steps
+                          ? t('leagues.detail.stepsAhead', {
+                              count: Math.abs(myRow.total_steps - nemesisRow.total_steps),
+                              steps: Math.abs(myRow.total_steps - nemesisRow.total_steps).toLocaleString(),
+                            })
+                          : t('leagues.detail.stepsBehind', {
+                              count: Math.abs(myRow.total_steps - nemesisRow.total_steps),
+                              steps: Math.abs(myRow.total_steps - nemesisRow.total_steps).toLocaleString(),
+                            })}
                       </Text>
                     </Text>
                   ) : (
                     <Text style={{ marginTop: theme.space(1.5), color: colors.textMuted, fontFamily: theme.fontFamily.bodyMedium }}>
-                      Tap to pick a rival to track head-to-head.
+                      {t('leagues.detail.tapToPickRival')}
                     </Text>
                   )}
                 </Pressable>
@@ -569,17 +586,24 @@ export default function LeagueDetail() {
               {history.length > 0 && (
                 <View style={{ paddingTop: theme.space(4), gap: theme.space(2.5) }}>
                   <Text style={{ fontFamily: theme.fontFamily.heading, fontSize: theme.font.heading, color: colors.text, textTransform: 'uppercase' }}>
-                    Past rounds
+                    {t('leagues.detail.pastRounds')}
                   </Text>
                   {history.map((round) => (
                     <View key={round.round_number} style={[styles.pastRound, { backgroundColor: colors.card }]}>
                       <Text style={{ fontSize: 11, color: colors.textMuted, fontFamily: theme.fontFamily.bodyMedium }}>
-                        Round {round.round_number} · {new Date(round.start_date).toLocaleDateString()} –{' '}
-                        {new Date(round.end_date).toLocaleDateString()}
+                        {t('leagues.detail.roundDateRange', {
+                          number: round.round_number,
+                          start: new Date(round.start_date).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+                          end: new Date(round.end_date).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+                        })}
                       </Text>
                       {round.standings[0] && (
                         <Text style={{ marginTop: theme.space(1), fontFamily: theme.fontFamily.heading, fontSize: 17, color: colors.text }}>
-                          {round.standings[0].display_name} — {round.standings[0].total_steps.toLocaleString()} steps
+                          {t('leagues.detail.standingSteps', {
+                            name: round.standings[0].display_name,
+                            count: round.standings[0].total_steps,
+                            steps: round.standings[0].total_steps.toLocaleString(),
+                          })}
                         </Text>
                       )}
                     </View>
@@ -588,12 +612,12 @@ export default function LeagueDetail() {
               )}
 
               <View style={{ paddingTop: theme.space(5), paddingBottom: theme.space(2) }}>
-                <SectionLabel>League chat</SectionLabel>
+                <SectionLabel>{t('leagues.detail.leagueChat')}</SectionLabel>
               </View>
               <View style={{ gap: theme.space(3), paddingBottom: theme.space(3) }}>
                 {messages.length === 0 ? (
                   <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small }}>
-                    No messages yet — say hi.
+                    {t('leagues.detail.noMessagesYet')}
                   </Text>
                 ) : (
                   messages.map((m) => (
@@ -602,7 +626,7 @@ export default function LeagueDetail() {
                       <View style={{ flex: 1 }}>
                         <Text>
                           <Text style={{ fontFamily: theme.fontFamily.bodySemiBold, fontSize: 12, color: colors.text }}>
-                            {m.is_me ? 'You' : m.display_name}{' '}
+                            {m.is_me ? t('common.you') : m.display_name}{' '}
                           </Text>
                           <Text style={{ fontFamily: theme.fontFamily.bodyMedium, fontSize: 11, color: colors.textDim }}>
                             {new Date(m.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
@@ -620,7 +644,7 @@ export default function LeagueDetail() {
               {!isCreator && (
                 <Pressable onPress={() => setExitSheetOpen(true)} hitSlop={8} style={{ paddingVertical: theme.space(3), alignItems: 'center' }}>
                   <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: colors.textMuted }}>
-                    Exit league
+                    {t('leagues.detail.exitLeague')}
                   </Text>
                 </Pressable>
               )}
@@ -634,7 +658,7 @@ export default function LeagueDetail() {
           <TextInput
             value={messageDraft}
             onChangeText={setMessageDraft}
-            placeholder="Say something…"
+            placeholder={t('leagues.detail.saySomething')}
             placeholderTextColor={colors.textDim}
             style={[styles.composerInput, { backgroundColor: colors.card, color: colors.text }]}
             onSubmitEditing={handleSendMessage}
@@ -644,12 +668,12 @@ export default function LeagueDetail() {
             disabled={sendingMessage || !messageDraft.trim()}
             style={[styles.sendButton, { backgroundColor: colors.accent, opacity: sendingMessage || !messageDraft.trim() ? 0.5 : 1 }]}
           >
-            <Text style={styles.sendButtonText}>Send</Text>
+            <Text style={styles.sendButtonText}>{t('leagues.detail.send')}</Text>
           </Pressable>
         </View>
       )}
 
-      <Sheet visible={nemesisSheetOpen} onClose={() => setNemesisSheetOpen(false)} title="Pick a rival">
+      <Sheet visible={nemesisSheetOpen} onClose={() => setNemesisSheetOpen(false)} title={t('leagues.detail.pickRival')}>
         {rows
           .filter((r) => !r.is_me)
           .map((r) => (
@@ -671,7 +695,7 @@ export default function LeagueDetail() {
       <Sheet
         visible={!!reactionTarget}
         onClose={() => setReactionTarget(null)}
-        title={reactionTarget ? `React to ${reactionTarget.name}` : undefined}
+        title={reactionTarget ? t('leagues.detail.reactTo', { name: reactionTarget.name }) : undefined}
       >
         <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: theme.space(2) }}>
           {getReactionEmojis().map((emoji) => (
@@ -692,21 +716,20 @@ export default function LeagueDetail() {
         </View>
       </Sheet>
 
-      <Sheet visible={exitSheetOpen} onClose={() => setExitSheetOpen(false)} title="Exit this league?">
+      <Sheet visible={exitSheetOpen} onClose={() => setExitSheetOpen(false)} title={t('leagues.detail.exitThisLeague')}>
         <View style={{ gap: theme.space(3.5) }}>
           <Text style={{ fontSize: 14, lineHeight: 20, fontFamily: theme.fontFamily.bodyMedium, color: colors.textSubtle }}>
-            You'll lose your spot in {league?.name ?? 'this league'} — you'd need a new invite to rejoin. Your past
-            standings stay in its history either way.
+            {t('leagues.detail.exitWarning', { name: league?.name ?? t('leagues.detail.thisLeague') })}
           </Text>
           {exitError && (
             <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small }}>{exitError}</Text>
           )}
           <View style={{ flexDirection: 'row', gap: theme.space(3) }}>
             <View style={{ flex: 1 }}>
-              <Button label="Stay" variant="secondary" onPress={() => setExitSheetOpen(false)} />
+              <Button label={t('leagues.detail.stay')} variant="secondary" onPress={() => setExitSheetOpen(false)} />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Exit league" variant="danger" onPress={handleExitLeague} loading={exiting} />
+              <Button label={t('leagues.detail.exitLeague')} variant="danger" onPress={handleExitLeague} loading={exiting} />
             </View>
           </View>
         </View>

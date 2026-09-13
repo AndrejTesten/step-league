@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,25 +10,27 @@ import { useSession } from '@/lib/auth-context';
 import { DEFAULT_DAILY_GOAL } from '@/lib/equivalences';
 import { getErrorMessage } from '@/lib/errors';
 import { fetchCitiesForCountry, fetchCountries } from '@/lib/geo';
+import { SUPPORTED_LANGUAGES, useLanguage } from '@/lib/i18n';
 import { getMyTotalWins, listMyLeagues } from '@/lib/leagues';
 import { getStepStats } from '@/lib/stats';
 import { supabase } from '@/lib/supabase';
 import { theme, useThemeColors, useThemeMode, type ThemeMode } from '@/lib/theme';
 import type { StepStats } from '@/lib/types';
 
-const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-  { value: 'system', label: 'Auto' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
-
 const EMPTY_STATS: StepStats = { today: 0, month: 0, year: 0, allTime: 0, bestDay: 0, daysLogged: 0, streak: 0 };
 
 export default function Profile() {
+  const { t } = useTranslation();
+  const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+    { value: 'system', label: t('profile.appearance.auto') },
+    { value: 'light', label: t('profile.appearance.light') },
+    { value: 'dark', label: t('profile.appearance.dark') },
+  ];
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mode, setMode } = useThemeMode();
+  const { language, setLanguage } = useLanguage();
   const { session, profile, signOut, refreshProfile } = useSession();
   const [city, setCity] = useState(profile?.city ?? '');
   const [country, setCountry] = useState(profile?.country ?? '');
@@ -108,7 +111,7 @@ export default function Profile() {
       await pickAndUploadAvatar(session.user.id);
       await refreshProfile();
     } catch (e) {
-      setError(getErrorMessage(e, 'Could not update photo.'));
+      setError(getErrorMessage(e, t('profile.errors.photo')));
     } finally {
       setUploadingPhoto(false);
     }
@@ -126,7 +129,7 @@ export default function Profile() {
       if (updateError) throw updateError;
       await refreshProfile();
     } catch (e) {
-      setError(getErrorMessage(e, 'Could not save location.'));
+      setError(getErrorMessage(e, t('profile.errors.location')));
     } finally {
       setSavingLocation(false);
     }
@@ -144,7 +147,7 @@ export default function Profile() {
       if (updateError) throw updateError;
       await refreshProfile();
     } catch (e) {
-      setError(getErrorMessage(e, 'Could not save your daily goal.'));
+      setError(getErrorMessage(e, t('profile.errors.goal')));
     } finally {
       setSavingGoal(false);
     }
@@ -161,10 +164,10 @@ export default function Profile() {
             <Avatar uri={profile?.avatar_url} name={profile?.display_name} size={72} variant="accent" />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.name, { color: colors.text }]}>{profile?.display_name ?? 'Profile'}</Text>
+            <Text style={[styles.name, { color: colors.text }]}>{profile?.display_name ?? t('profile.fallbackName')}</Text>
             <Pressable onPress={handleChangePhoto} disabled={uploadingPhoto} hitSlop={8}>
               <Text style={{ marginTop: theme.space(1.5), fontSize: 11, fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>
-                @{profile?.username} · {uploadingPhoto ? 'Uploading…' : 'change photo'}
+                @{profile?.username} · {uploadingPhoto ? t('profile.uploading') : t('profile.changePhoto')}
               </Text>
             </Pressable>
           </View>
@@ -173,71 +176,71 @@ export default function Profile() {
         <View style={styles.statsRow}>
           <View style={[styles.statCell, { backgroundColor: colors.card }]}>
             <Text style={[styles.statValue, { color: colors.accent }]}>{stats.streak}</Text>
-            <SectionLabel style={{ marginTop: theme.space(1.75) }}>Day streak</SectionLabel>
+            <SectionLabel style={{ marginTop: theme.space(1.75) }}>{t('profile.stats.dayStreak')}</SectionLabel>
           </View>
           <View style={[styles.statCell, { backgroundColor: colors.card }]}>
             <Text style={[styles.statValue, { color: colors.text }]}>{leagueCount}</Text>
-            <SectionLabel style={{ marginTop: theme.space(1.75) }}>Leagues</SectionLabel>
+            <SectionLabel style={{ marginTop: theme.space(1.75) }}>{t('profile.stats.leagues')}</SectionLabel>
           </View>
           <View style={[styles.statCell, { backgroundColor: colors.card }]}>
             <Text style={[styles.statValue, { color: colors.text }]}>{wins}</Text>
-            <SectionLabel style={{ marginTop: theme.space(1.75) }}>Wins</SectionLabel>
+            <SectionLabel style={{ marginTop: theme.space(1.75) }}>{t('profile.stats.wins')}</SectionLabel>
           </View>
         </View>
 
         <View style={[styles.locationBlock, { borderTopColor: colors.border }]}>
-          <SectionLabel>Country</SectionLabel>
+          <SectionLabel>{t('profile.location.country')}</SectionLabel>
           <SearchableSelect
-            placeholder="Country"
+            placeholder={t('profile.location.country')}
             value={country}
             options={countries}
             onSelect={handleSelectCountry}
             loading={countriesLoading}
-            emptyMessage="No countries found."
+            emptyMessage={t('profile.location.noCountries')}
           />
         </View>
         <View style={[styles.locationBlock, { paddingTop: theme.space(3), borderTopWidth: 0 }]}>
-          <SectionLabel>City</SectionLabel>
+          <SectionLabel>{t('profile.location.city')}</SectionLabel>
           <SearchableSelect
-            placeholder="City"
+            placeholder={t('profile.location.city')}
             value={city}
             options={cities}
             onSelect={setCity}
             loading={citiesLoading}
             disabled={!country}
-            emptyMessage={country ? 'No cities found.' : 'Pick a country first.'}
+            emptyMessage={country ? t('profile.location.noCities') : t('profile.location.pickCountryFirst')}
           />
         </View>
         {locationChanged && (
           <View style={{ paddingVertical: theme.space(3) }}>
-            <Button label="Save location" onPress={handleSaveLocation} loading={savingLocation} />
+            <Button label={t('profile.location.save')} onPress={handleSaveLocation} loading={savingLocation} />
           </View>
         )}
 
         <View style={[styles.settingRow, { borderTopColor: colors.border }]}>
-          <SectionLabel>Daily goal</SectionLabel>
+          <SectionLabel>{t('profile.dailyGoal.label')}</SectionLabel>
           <Input
             placeholder={String(DEFAULT_DAILY_GOAL)}
             value={dailyGoal}
-            onChangeText={(t) => setDailyGoal(t.replace(/[^0-9]/g, ''))}
+            onChangeText={(val) => setDailyGoal(val.replace(/[^0-9]/g, ''))}
             keyboardType="number-pad"
             style={[styles.settingInput, { fontFamily: theme.fontFamily.heading, fontSize: 20 }]}
           />
         </View>
         {goalChanged && (
           <View style={{ paddingVertical: theme.space(3) }}>
-            <Button label="Save daily goal" onPress={handleSaveGoal} loading={savingGoal} />
+            <Button label={t('profile.dailyGoal.save')} onPress={handleSaveGoal} loading={savingGoal} />
           </View>
         )}
         <View style={[styles.settingRow, { borderTopColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}>
-          <SectionLabel>Score update</SectionLabel>
+          <SectionLabel>{t('profile.scoreUpdate.label')}</SectionLabel>
           <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>
-            22:00 <Text style={{ color: colors.textDim, fontSize: 11 }}>local</Text>
+            22:00 <Text style={{ color: colors.textDim, fontSize: 11 }}>{t('profile.scoreUpdate.local')}</Text>
           </Text>
         </View>
         <View style={[styles.settingRow, { borderTopColor: colors.border, borderBottomWidth: theme.border, borderBottomColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}>
-          <SectionLabel>Notifications</SectionLabel>
-          <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>Results only</Text>
+          <SectionLabel>{t('profile.notifications.label')}</SectionLabel>
+          <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>{t('profile.notifications.resultsOnly')}</Text>
         </View>
 
         <View style={{ paddingTop: theme.space(5), gap: theme.space(2.75) }}>
@@ -247,9 +250,9 @@ export default function Profile() {
               style={[styles.coffeeRow, { borderColor: colors.accent, backgroundColor: colors.accentWash }]}
             >
               <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: colors.accent }}>
-                Premium active
+                {t('profile.premium.active')}
               </Text>
-              <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>€1.99/mo →</Text>
+              <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>{t('profile.premium.priceArrow')}</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -263,7 +266,7 @@ export default function Profile() {
               {({ pressed }: { pressed: boolean }) => (
                 <>
                   <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: pressed ? colors.primaryText : colors.accent }}>
-                    Get premium · €1.99/mo
+                    {t('profile.premium.getPremium')}
                   </Text>
                   <Text style={{ fontSize: 15, color: pressed ? colors.primaryText : colors.accent }}>→</Text>
                 </>
@@ -271,7 +274,7 @@ export default function Profile() {
             </Pressable>
           )}
           <Text style={{ fontSize: 11, lineHeight: 16, maxWidth: 300, color: colors.textDim, fontFamily: theme.fontFamily.bodyMedium }}>
-            Step League is one person and a server bill. No ads, no selling your steps.
+            {t('profile.footerNote')}
           </Text>
         </View>
 
@@ -279,22 +282,38 @@ export default function Profile() {
           onPress={() => router.push(profile?.is_pro ? '/stats-history' : '/premium')}
           style={[styles.settingRow, { borderTopColor: colors.border, justifyContent: 'space-between', alignItems: 'center', marginTop: theme.space(3) }]}
         >
-          <SectionLabel>Stat history</SectionLabel>
+          <SectionLabel>{t('profile.statHistory.label')}</SectionLabel>
           <Text style={{ fontSize: 13, fontFamily: theme.fontFamily.bodySemiBold, color: profile?.is_pro ? colors.text : colors.textMuted }}>
-            {profile?.is_pro ? 'Every league, all time →' : 'Premium →'}
+            {profile?.is_pro ? t('profile.statHistory.allTime') : t('profile.statHistory.premium')}
           </Text>
         </Pressable>
 
         <View style={{ gap: theme.space(2), marginTop: theme.space(5) }}>
           <Text style={{ fontSize: theme.font.small, fontFamily: theme.fontFamily.heading, color: colors.text, textTransform: 'uppercase' }}>
-            Appearance
+            {t('profile.appearance.heading')}
           </Text>
           <Tabs options={THEME_OPTIONS} value={mode} onChange={setMode} />
           <Pressable onPress={() => router.push('/theme-picker')} style={{ paddingVertical: theme.space(2) }} hitSlop={4}>
             <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.accent }}>
-              Color themes →
+              {t('profile.appearance.colorThemes')}
             </Text>
           </Pressable>
+        </View>
+
+        <View style={{ gap: theme.space(2), marginTop: theme.space(5) }}>
+          <Text style={{ fontSize: theme.font.small, fontFamily: theme.fontFamily.heading, color: colors.text, textTransform: 'uppercase' }}>
+            {t('profile.language.heading')}
+          </Text>
+          {SUPPORTED_LANGUAGES.map((lang) => (
+            <Pressable
+              key={lang.code}
+              onPress={() => setLanguage(lang.code)}
+              style={[styles.settingRow, { borderTopColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}
+            >
+              <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>{lang.label}</Text>
+              {language === lang.code && <Text style={{ fontSize: 15, color: colors.accent }}>✓</Text>}
+            </Pressable>
+          ))}
         </View>
 
         {error && (
@@ -305,7 +324,7 @@ export default function Profile() {
 
         <Pressable onPress={signOut} hitSlop={8} style={{ paddingVertical: theme.space(2), marginTop: theme.space(5) }}>
           <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: colors.textMuted }}>
-            Sign out
+            {t('profile.signOut')}
           </Text>
         </Pressable>
       </ScrollView>

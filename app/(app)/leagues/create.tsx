@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,18 +29,25 @@ function endOfYear() {
   return new Date(d.getFullYear(), 11, 31);
 }
 
-const PRESETS: { label: string; date: () => Date }[] = [
-  { label: '1 week', date: () => addDays(7) },
-  { label: '1 month', date: () => addDays(30) },
-  { label: 'End of year', date: endOfYear },
+const PRESET_DATES: { key: string; date: () => Date }[] = [
+  { key: '1week', date: () => addDays(7) },
+  { key: '1month', date: () => addDays(30) },
+  { key: 'endOfYear', date: endOfYear },
 ];
 
-const SCORING_OPTIONS: { value: LeagueScoringMode; label: string; hint: string }[] = [
-  { value: 'daily_wins', label: 'Daily wins', hint: "Daily wins: 1 point to whoever tops the 22:00 table." },
-  { value: 'total_steps', label: 'Total steps', hint: 'Total steps: standings rank by the whole round’s total.' },
+const SCORING_KEYS: { value: LeagueScoringMode; key: string }[] = [
+  { value: 'daily_wins', key: 'dailyWins' },
+  { value: 'total_steps', key: 'totalSteps' },
 ];
 
 export default function CreateLeague() {
+  const { t } = useTranslation();
+  const PRESETS = PRESET_DATES.map((p) => ({ ...p, label: t(`leagues.create.presets.${p.key}`) }));
+  const SCORING_OPTIONS = SCORING_KEYS.map((o) => ({
+    ...o,
+    label: t(`leagues.create.scoring.${o.key}.label`),
+    hint: t(`leagues.create.scoring.${o.key}.hint`),
+  }));
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
@@ -53,7 +61,7 @@ export default function CreateLeague() {
 
   async function handleCreate() {
     if (!name.trim()) {
-      setError('Give your league a name.');
+      setError(t('leagues.create.errors.nameRequired'));
       return;
     }
     setError(null);
@@ -67,7 +75,7 @@ export default function CreateLeague() {
       });
       router.replace(`/leagues/${league.id}`);
     } catch (e) {
-      setError(getErrorMessage(e, 'Could not create the league.'));
+      setError(getErrorMessage(e, t('leagues.create.errors.createFailed')));
     } finally {
       setLoading(false);
     }
@@ -85,17 +93,17 @@ export default function CreateLeague() {
         showsVerticalScrollIndicator={false}
       >
       <View style={{ gap: theme.space(1.75) }}>
-        <SectionLabel>League name</SectionLabel>
-        <Input placeholder="e.g. Office Squad" value={name} onChangeText={setName} maxLength={60} />
+        <SectionLabel>{t('leagues.create.nameLabel')}</SectionLabel>
+        <Input placeholder={t('leagues.create.namePlaceholder')} value={name} onChangeText={setName} maxLength={60} />
       </View>
 
       <View style={{ gap: theme.space(1.75) }}>
-        <SectionLabel>Ends on</SectionLabel>
+        <SectionLabel>{t('leagues.create.endsOnLabel')}</SectionLabel>
         <DatePickerField value={deadline} onChange={setDeadline} minimumDate={new Date()} />
         <View style={{ flexDirection: 'row', gap: theme.space(1.5), flexWrap: 'wrap' }}>
           {PRESETS.map((preset) => (
             <Pressable
-              key={preset.label}
+              key={preset.key}
               onPress={() => setDeadline(preset.date())}
               style={[styles.presetChip, { borderColor: colors.controlBorder }]}
             >
@@ -108,7 +116,7 @@ export default function CreateLeague() {
       </View>
 
       <View style={{ gap: theme.space(1.75) }}>
-        <SectionLabel>Scoring</SectionLabel>
+        <SectionLabel>{t('leagues.create.scoringLabel')}</SectionLabel>
         <View style={[styles.segmented, { backgroundColor: colors.card }]}>
           {SCORING_OPTIONS.map((opt) => {
             const active = opt.value === scoringMode;
@@ -139,13 +147,13 @@ export default function CreateLeague() {
       </View>
 
       <View style={{ gap: theme.space(2.25) }}>
-        <SectionLabel>Who can join</SectionLabel>
+        <SectionLabel>{t('leagues.create.whoCanJoinLabel')}</SectionLabel>
         <Pressable style={styles.radioRow} onPress={() => setIsPublic(false)}>
           <View style={[styles.radioOuter, { borderColor: !isPublic ? colors.accent : colors.controlBorder }]}>
             {!isPublic && <View style={[styles.radioInner, { backgroundColor: colors.accent }]} />}
           </View>
           <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>
-            Invite code only
+            {t('leagues.create.inviteCodeOnly')}
           </Text>
         </Pressable>
         <Pressable style={styles.radioRow} onPress={() => setIsPublic(true)}>
@@ -153,15 +161,15 @@ export default function CreateLeague() {
             {isPublic && <View style={[styles.radioInner, { backgroundColor: colors.accent }]} />}
           </View>
           <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: isPublic ? colors.text : colors.textMuted }}>
-            Anyone can find it
+            {t('leagues.create.anyoneCanFindIt')}
           </Text>
         </Pressable>
       </View>
 
       <View style={{ gap: theme.space(1.75) }}>
-        <SectionLabel>Stakes (optional)</SectionLabel>
-        <Input placeholder="Winner gets… e.g. picks the next restaurant" value={winnerStakes} onChangeText={setWinnerStakes} maxLength={140} />
-        <Input placeholder="Loser has to… e.g. buys coffee for a week" value={loserStakes} onChangeText={setLoserStakes} maxLength={140} />
+        <SectionLabel>{t('leagues.create.stakesLabel')}</SectionLabel>
+        <Input placeholder={t('leagues.create.winnerStakesPlaceholder')} value={winnerStakes} onChangeText={setWinnerStakes} maxLength={140} />
+        <Input placeholder={t('leagues.create.loserStakesPlaceholder')} value={loserStakes} onChangeText={setLoserStakes} maxLength={140} />
       </View>
 
       {error && (
@@ -170,7 +178,7 @@ export default function CreateLeague() {
         </Text>
       )}
 
-      <Button label="Create league" onPress={handleCreate} loading={loading} arrow />
+      <Button label={t('leagues.create.submit')} onPress={handleCreate} loading={loading} arrow />
       </ScrollView>
     </Screen>
   );

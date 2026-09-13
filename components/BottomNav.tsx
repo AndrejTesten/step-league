@@ -1,9 +1,10 @@
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme, useThemeColors } from '@/lib/theme';
 
-const SEGMENTS = ['Leagues', 'Steps', 'Global'];
+const SEGMENT_KEYS = ['home.bottomNav.leagues', 'home.bottomNav.steps', 'home.bottomNav.global'] as const;
 
 /**
  * The 3-page bottom nav shared by the swipeable home pages. Words, no
@@ -11,16 +12,18 @@ const SEGMENTS = ['Leagues', 'Steps', 'Global'];
  * screen "Bottom nav"). Tapping a segment scrolls the pager to it.
  */
 export function BottomNav({ activeIndex, onChange }: { activeIndex: 0 | 1 | 2; onChange: (index: 0 | 1 | 2) => void }) {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.row, { borderTopColor: colors.borderStrong, paddingBottom: Math.max(insets.bottom, theme.space(3)) }]}>
-      {SEGMENTS.map((label, i) => {
+      {SEGMENT_KEYS.map((key, i) => {
+        const label = t(key);
         const active = i === activeIndex;
         return (
           <Pressable
-            key={label}
+            key={key}
             onPress={() => onChange(i as 0 | 1 | 2)}
             style={[
               styles.segment,

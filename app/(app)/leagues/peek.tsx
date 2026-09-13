@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,6 +19,7 @@ const PEEK_SECONDS = 10;
  * ever fetching live data.
  */
 export default function Peek() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
@@ -66,7 +68,7 @@ export default function Peek() {
     return (
       <View style={[styles.screen, { backgroundColor: colors.bg, paddingTop: insets.top + theme.space(20) }]}>
         <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium, textAlign: 'center' }}>
-          Peeking…
+          {t('leagues.peek.peeking')}
         </Text>
       </View>
     );
@@ -82,14 +84,14 @@ export default function Peek() {
     <View style={[styles.screen, { backgroundColor: colors.bg, paddingTop: insets.top + theme.space(3.5) }]}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: colors.text }]}>{name ?? 'League'}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{name ?? t('leagues.peek.leagueFallback')}</Text>
           <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-            Live peek · {new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+            {t('leagues.peek.livePeekAt', { time: new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) })}
           </Text>
         </View>
         <View style={[styles.remainingChip, { backgroundColor: colors.accentChip }]}>
           <Text style={{ fontSize: 9, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.accent }}>
-            {remaining} left today
+            {t('leagues.peek.leftToday', { count: remaining })}
           </Text>
         </View>
       </View>
@@ -97,13 +99,13 @@ export default function Peek() {
       {result?.gapToFirst !== null && result?.gapToFirst !== undefined && (
         <View style={[styles.gapCard, { backgroundColor: colors.card, borderColor: colors.accent }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={[styles.gapLabel, { color: colors.textMuted }]}>{result.gapToFirst === 0 ? "You're in 1st" : 'Gap to 1st'}</Text>
-            <Text style={[styles.gapCaption, { color: colors.textDim }]}>Closes in {secondsLeft}s</Text>
+            <Text style={[styles.gapLabel, { color: colors.textMuted }]}>{result.gapToFirst === 0 ? t('leagues.peek.inFirst') : t('leagues.peek.gapToFirst')}</Text>
+            <Text style={[styles.gapCaption, { color: colors.textDim }]}>{t('leagues.peek.closesIn', { seconds: secondsLeft })}</Text>
           </View>
           {result.gapToFirst > 0 && (
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: theme.space(2.5) }}>
               <Text style={[styles.gapValue, { color: colors.accent }]}>{result.gapToFirst.toLocaleString()}</Text>
-              <Text style={[styles.gapBehind, { color: colors.textSubtle }]}>behind{'\n'}{result.leaderName}</Text>
+              <Text style={[styles.gapBehind, { color: colors.textSubtle }]}>{t('leagues.peek.behind')}{'\n'}{result.leaderName}</Text>
             </View>
           )}
         </View>
@@ -111,9 +113,9 @@ export default function Peek() {
 
       <View style={[styles.tableHeader, { borderColor: colors.border }]}>
         <Text style={[styles.tableHeaderCell, { width: 26, color: colors.textDim }]}>#</Text>
-        <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>Member</Text>
-        <Text style={[styles.tableHeaderCell, { width: 56, textAlign: 'right', color: colors.textDim }]}>Now</Text>
-        <Text style={[styles.tableHeaderCell, { width: 56, textAlign: 'right', color: colors.textDim }]}>Pace</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>{t('leagues.detail.columnMember')}</Text>
+        <Text style={[styles.tableHeaderCell, { width: 56, textAlign: 'right', color: colors.textDim }]}>{t('leagues.peek.columnNow')}</Text>
+        <Text style={[styles.tableHeaderCell, { width: 56, textAlign: 'right', color: colors.textDim }]}>{t('leagues.peek.columnPace')}</Text>
       </View>
       {result?.rows.map((r, i) => (
         <View
@@ -130,7 +132,7 @@ export default function Peek() {
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.space(2.5) }}>
             <Avatar name={r.display_name} uri={r.avatar_url} size={26} variant={r.is_me ? 'accent' : 'default'} />
             <Text style={[styles.name, { color: r.is_me ? colors.accent : colors.text }]} numberOfLines={1}>
-              {r.is_me ? 'You' : r.display_name}
+              {r.is_me ? t('common.you') : r.display_name}
             </Text>
           </View>
           <Text style={[styles.now, { color: r.is_me ? colors.accent : colors.text }]}>{r.now_steps.toLocaleString()}</Text>
@@ -139,7 +141,7 @@ export default function Peek() {
       ))}
 
       <Text style={[styles.footnote, { color: colors.textDim }]}>
-        Pace projects tonight's finish at today's current rate. Peeks are silent — nobody sees that you looked.
+        {t('leagues.peek.footnote')}
       </Text>
 
       <View style={styles.pips}>
@@ -147,7 +149,7 @@ export default function Peek() {
           <View key={i} style={[styles.pip, { backgroundColor: i < usedDots ? colors.borderStrong : colors.accent }]} />
         ))}
         <Text style={{ marginLeft: theme.space(2), fontSize: 12, fontFamily: theme.fontFamily.bodySemiBold, color: colors.text }}>
-          {remaining} of {limit} peeks left
+          {t('leagues.peek.peeksLeftOf', { remaining, limit })}
         </Text>
       </View>
 
@@ -157,7 +159,7 @@ export default function Peek() {
         style={[styles.backButton, { borderColor: colors.controlBorder, marginBottom: insets.bottom + theme.space(4) }]}
       >
         <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: colors.textMuted }}>
-          Back to league · {secondsLeft}s
+          {t('leagues.peek.backToLeague', { seconds: secondsLeft })}
         </Text>
       </Pressable>
     </View>
@@ -170,13 +172,14 @@ function formatPace(n: number): string {
 }
 
 function PeekDenied({ name }: { name?: string }) {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flex: 1, opacity: 0.25, paddingTop: insets.top + theme.space(16), paddingHorizontal: theme.space(4.5) }} pointerEvents="none">
         <Text style={{ fontSize: 28, fontFamily: theme.fontFamily.heading, textTransform: 'uppercase', color: colors.text }}>
-          {name ?? 'League'}
+          {name ?? t('leagues.peek.leagueFallback')}
         </Text>
       </View>
       <View style={[styles.deniedSheet, { backgroundColor: colors.card, borderColor: colors.borderStrong, paddingBottom: insets.bottom + theme.space(4) }]}>
@@ -188,26 +191,25 @@ function PeekDenied({ name }: { name?: string }) {
         </View>
         <View style={[styles.premiumChip, { backgroundColor: colors.accentChip, alignSelf: 'flex-start' }]}>
           <Text style={{ fontSize: 9, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1.4, textTransform: 'uppercase', color: colors.accent }}>
-            Premium
+            {t('leagues.peek.premium')}
           </Text>
         </View>
         <Text style={{ fontSize: 30, lineHeight: 29, fontFamily: theme.fontFamily.heading, textTransform: 'uppercase', color: colors.text }}>
-          That was{'\n'}today's peek
+          {t('leagues.peek.deniedHeading')}
         </Text>
         <Text style={{ fontSize: 15, lineHeight: 22, color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>
-          Free gives you one look per day. Premium gives you three — enough to check at lunch, after work, and
-          right before the table locks.
+          {t('leagues.peek.deniedBody')}
         </Text>
         <Pressable
           onPress={() => router.replace('/premium')}
           style={({ pressed }) => [styles.getPremiumButton, { backgroundColor: pressed ? colors.accentHover : colors.accent }]}
         >
-          <Text style={[styles.getPremiumButtonText, { color: colors.primaryText }]}>Get premium · €1.99/mo</Text>
+          <Text style={[styles.getPremiumButtonText, { color: colors.primaryText }]}>{t('leagues.peek.getPremium')}</Text>
           <Text style={[styles.getPremiumButtonText, { color: colors.primaryText }]}>→</Text>
         </Pressable>
         <Pressable onPress={() => router.back()} hitSlop={8} style={{ alignSelf: 'center' }}>
           <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: colors.textMuted }}>
-            Wait for 22:00
+            {t('leagues.peek.waitFor2200')}
           </Text>
         </Pressable>
       </View>

@@ -1,0 +1,504 @@
+{
+  "common": {
+    "cancel": "Annulla",
+    "continue": "Continua",
+    "save": "Salva",
+    "done": "Fatto",
+    "back": "Indietro",
+    "loading": "Caricamento…",
+    "tryAgain": "Riprova",
+    "close": "Chiudi",
+    "you": "Tu",
+    "noMatches": "Nessun risultato."
+  },
+  "app": {
+    "error": {
+      "title": "Qualcosa è andato storto",
+      "message": "È stato segnalato automaticamente. Riprova. Se continua a succedere, chiudi e riapri l'app."
+    }
+  },
+  "nav": {
+    "newLeague": "Nuova lega",
+    "joinLeague": "Unisciti a una lega",
+    "shareResults": "Condividi risultati",
+    "yourStats": "Le tue statistiche",
+    "profile": "Profilo",
+    "appearance": "Aspetto"
+  },
+  "auth": {
+    "signIn": {
+      "tagline": "I punteggi restano bloccati fino alle 22:00. Cammina tutto il giorno, scoprilo la sera.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "tu@esempio.it",
+      "passwordLabel": "Password",
+      "noAccount": "Non hai un account? Registrati"
+    },
+    "signUp": {
+      "tagline": "Sfida i tuoi amici, una lega alla volta.",
+      "displayNameLabel": "Nome visualizzato",
+      "usernameLabel": "Nome utente",
+      "fillAllFields": "Compila tutti i campi.",
+      "submit": "Registrati",
+      "checkEmailTitle": "Controlla la tua email",
+      "checkEmailMessage": "Ti abbiamo inviato un link di conferma a {{email}}. Aprilo, poi torna qui e accedi.",
+      "backToSignIn": "Torna al login",
+      "noAccountFlip": "Hai già un account? Accedi"
+    },
+    "social": {
+      "comingSoon": "L'accesso con {{provider}} arriverà presto. Per ora usa l'email.",
+      "divider": "OPPURE",
+      "continueWith": "Continua con {{provider}}"
+    }
+  },
+  "profile": {
+    "language": {
+      "heading": "Lingua"
+    },
+    "fallbackName": "Profilo",
+    "uploading": "Caricamento…",
+    "changePhoto": "cambia foto",
+    "footerNote": "Step League è una persona sola e una bolletta del server. Niente pubblicità, i tuoi passi non si vendono.",
+    "signOut": "Esci",
+    "stats": {
+      "dayStreak": "Giorni di fila",
+      "leagues": "Leghe",
+      "wins": "Vittorie"
+    },
+    "location": {
+      "country": "Paese",
+      "city": "Città",
+      "noCountries": "Nessun paese trovato.",
+      "noCities": "Nessuna città trovata.",
+      "pickCountryFirst": "Scegli prima un paese.",
+      "save": "Salva posizione"
+    },
+    "dailyGoal": {
+      "label": "Obiettivo giornaliero",
+      "save": "Salva obiettivo"
+    },
+    "scoreUpdate": {
+      "label": "Aggiornamento punteggio",
+      "local": "ora locale"
+    },
+    "notifications": {
+      "label": "Notifiche",
+      "resultsOnly": "Solo risultati"
+    },
+    "premium": {
+      "active": "Premium attivo",
+      "priceArrow": "1,99 €/mese →",
+      "getPremium": "Passa a Premium · 1,99 €/mese"
+    },
+    "statHistory": {
+      "label": "Storico statistiche",
+      "allTime": "Ogni lega, da sempre →",
+      "premium": "Premium →"
+    },
+    "appearance": {
+      "heading": "Aspetto",
+      "colorThemes": "Temi colore →",
+      "auto": "Automatico",
+      "light": "Chiaro",
+      "dark": "Scuro"
+    },
+    "errors": {
+      "photo": "Impossibile aggiornare la foto.",
+      "location": "Impossibile salvare la posizione.",
+      "goal": "Impossibile salvare il tuo obiettivo giornaliero."
+    }
+  },
+  "home": {
+    "bottomNav": {
+      "leagues": "Leghe",
+      "steps": "Passi",
+      "global": "Globale"
+    },
+    "yourLeagues": {
+      "title": "Leghe",
+      "createLeague": "Crea lega",
+      "joinWithCode": "Unisciti con un codice",
+      "emptyTitle": "Ancora nessuna lega",
+      "emptyBody": "Creane una e manda il codice d'invito ai tuoi amici.",
+      "membersEndsOn_one": "{{count}} membro · finisce {{date}}",
+      "membersEndsOn_other": "{{count}} membri · finisce {{date}}",
+      "membersFinishedOn_one": "{{count}} membro · finita {{date}}",
+      "membersFinishedOn_other": "{{count}} membri · finita {{date}}",
+      "youWon": "Hai vinto",
+      "sealedLeft": "Sigillata · restano {{time}}",
+      "ofCount": "Su {{count}}",
+      "footerNote": "Le tabelle mostrano sempre ieri. Le righe di oggi si sbloccano alle 22:00."
+    },
+    "stepCounter": {
+      "premium": "Premium",
+      "goPremium": "Passa a Premium",
+      "syncError": "I passi non si sincronizzano: {{error}}",
+      "todayLabel": "Oggi · {{date}}",
+      "steps": "Passi",
+      "goalPct": "{{percent}}% di {{goal}}",
+      "goalReached": "Obiettivo raggiunto",
+      "toGo": "ne mancano {{total}}",
+      "distance": "Distanza",
+      "km": "km",
+      "kcal": "Kcal",
+      "moving": "In movimento",
+      "scoresUnlockIn": "I punteggi si sbloccano tra",
+      "leaguesWaiting_one": "{{count}} lega in attesa",
+      "leaguesWaiting_other": "{{count}} leghe in attesa",
+      "yesterday": "Ieri",
+      "rankInLeague": "{{rank}} · {{league}}",
+      "rankOrdinal_ordinal_one": "{{count}}°",
+      "rankOrdinal_ordinal_two": "{{count}}°",
+      "rankOrdinal_ordinal_few": "{{count}}°",
+      "rankOrdinal_ordinal_other": "{{count}}°"
+    },
+    "leaderboards": {
+      "title": "Globale",
+      "world": "Mondo",
+      "theWorld": "il mondo",
+      "searchPlaceholder": "Cerca per nome",
+      "yourPlaceIn": "La tua posizione in {{scope}}",
+      "ofTotal": "su {{total}}",
+      "topPercent": "top {{percent}}%",
+      "columnWalker": "Camminatore",
+      "columnSteps": "Passi",
+      "addLocationInProfile": "Aggiungi {{scope}} nel Profilo per vedere questa classifica.",
+      "noStepsYet": "Ancora nessuno ha registrato passi qui.",
+      "errors": {
+        "loadFailed": "Impossibile caricare la classifica."
+      }
+    }
+  },
+  "leagues": {
+    "chart": {
+      "notEnoughData": "Non ci sono ancora abbastanza giorni registrati per disegnare un grafico.",
+      "youSuffix": " (tu)"
+    },
+    "create": {
+      "nameLabel": "Nome della lega",
+      "namePlaceholder": "es. Squadra dell'ufficio",
+      "endsOnLabel": "Finisce il",
+      "scoringLabel": "Punteggio",
+      "whoCanJoinLabel": "Chi può partecipare",
+      "inviteCodeOnly": "Solo con codice d'invito",
+      "anyoneCanFindIt": "Chiunque può trovarla",
+      "stakesLabel": "Posta in palio (opzionale)",
+      "winnerStakesPlaceholder": "Il vincitore ottiene… es. sceglie il prossimo ristorante",
+      "loserStakesPlaceholder": "Il perdente deve… es. offrire il caffè per una settimana",
+      "submit": "Crea lega",
+      "presets": {
+        "1week": "1 settimana",
+        "1month": "1 mese",
+        "endOfYear": "Fine anno"
+      },
+      "scoring": {
+        "dailyWins": {
+          "label": "Vittorie giornaliere",
+          "hint": "Vittorie giornaliere: 1 punto a chi è primo in classifica alle 22:00."
+        },
+        "totalSteps": {
+          "label": "Passi totali",
+          "hint": "Passi totali: la classifica si basa sul totale di tutta la stagione."
+        }
+      },
+      "errors": {
+        "nameRequired": "Dai un nome alla tua lega.",
+        "createFailed": "Impossibile creare la lega."
+      }
+    },
+    "join": {
+      "codeLabel": "Inserisci il codice a sei caratteri",
+      "codeHint": "I codici arrivano da chi ha creato la lega.",
+      "submit": "Unisciti alla lega",
+      "openLeagues": "Leghe aperte",
+      "openLeaguesNear": "Leghe aperte vicino a {{city}}",
+      "noOpenLeagues": "Ancora nessuna lega aperta da mostrare.",
+      "joinChip": "Unisciti",
+      "membersEndsOn_one": "{{count}} membro · finisce {{date}}",
+      "membersEndsOn_other": "{{count}} membri · finisce {{date}}",
+      "membersEndsOnShort_one": "{{count}} membro · finisce {{date}}",
+      "membersEndsOnShort_other": "{{count}} membri · finisce {{date}}",
+      "errors": {
+        "notFound": "Nessuna lega trovata per quel codice.",
+        "joinFailed": "Impossibile unirsi a quella lega."
+      }
+    },
+    "detail": {
+      "viewList": "Lista",
+      "viewGraph": "Grafico",
+      "peek": "Sbircia",
+      "invite": "Invita",
+      "membersCount_one": "{{count}} membro",
+      "membersCount_other": "{{count}} membri",
+      "finished": "finita",
+      "endsOn": "finisce {{date}}",
+      "scoringDailyWins": "vittorie giornaliere",
+      "scoringTotalSteps": "passi totali",
+      "winnerGets": "Il vincitore ottiene:",
+      "loserHasTo": "Il perdente deve:",
+      "showingDate": "Mostra {{date}}",
+      "liveSteps": "Passi in diretta",
+      "unlocksAt2200": "Oggi si sblocca alle 22:00",
+      "loadingGraph": "Caricamento grafico…",
+      "leagueScore": "Punteggio della lega",
+      "finalStandingsWinner": "Classifica finale · vincitore",
+      "dailyWinsCount_one": "{{count}} vittoria giornaliera",
+      "dailyWinsCount_other": "{{count}} vittorie giornaliere",
+      "holdToReact": "Tieni premuto su un nome per reagire",
+      "columnMember": "Membro",
+      "columnPoints": "Pt",
+      "noStepsRecorded": "Ancora nessun passo registrato. Apri l'app sul telefono con l'accesso a Salute concesso.",
+      "rematchNewLeague": "Rivincita: nuova lega",
+      "newEndDate": "Nuova data di fine",
+      "whosPlaying": "Chi gioca questa stagione",
+      "alwaysIn": " (sempre dentro)",
+      "confirm": "Conferma",
+      "waitingForOwner": "In attesa che chi ha creato la lega avvii una nuova stagione.",
+      "shareFinalTable": "Condividi tabella finale",
+      "rival": "Rivale",
+      "stepsAhead_one": "{{steps}} passo di vantaggio",
+      "stepsAhead_other": "{{steps}} passi di vantaggio",
+      "stepsBehind_one": "{{steps}} passo di distacco",
+      "stepsBehind_other": "{{steps}} passi di distacco",
+      "tapToPickRival": "Tocca per scegliere un rivale e tenere traccia del testa a testa.",
+      "pastRounds": "Stagioni passate",
+      "roundDateRange": "Stagione {{number}} · {{start}} – {{end}}",
+      "standingSteps_one": "{{name}}: {{steps}} passo",
+      "standingSteps_other": "{{name}}: {{steps}} passi",
+      "leagueChat": "Chat della lega",
+      "noMessagesYet": "Ancora nessun messaggio. Saluta.",
+      "exitLeague": "Esci dalla lega",
+      "saySomething": "Scrivi qualcosa…",
+      "send": "Invia",
+      "pickRival": "Scegli un rivale",
+      "reactTo": "Reagisci a {{name}}",
+      "exitThisLeague": "Uscire da questa lega?",
+      "exitWarning": "Perderai il tuo posto in {{name}}. Ti servirà un nuovo invito per rientrare. Le tue classifiche passate restano comunque nella storia.",
+      "thisLeague": "questa lega",
+      "stay": "Resta",
+      "inviteMessage": "Unisciti alla mia lega di passi \"{{name}}\" su StepLeague! Usa il codice {{code}}. Finisce il {{date}}.",
+      "errors": {
+        "loadFailed": "Impossibile caricare questa lega.",
+        "restartFailed": "Impossibile avviare una nuova stagione.",
+        "exitFailed": "Impossibile uscire da questa lega."
+      }
+    },
+    "peek": {
+      "peeking": "Sto sbirciando…",
+      "leagueFallback": "Lega",
+      "livePeekAt": "Sguardo in diretta · {{time}}",
+      "leftToday_one": "{{count}} rimasto oggi",
+      "leftToday_other": "{{count}} rimasti oggi",
+      "inFirst": "Sei primo",
+      "gapToFirst": "Distacco dal primo",
+      "closesIn": "Si chiude tra {{seconds}}s",
+      "behind": "di distacco da",
+      "columnNow": "Ora",
+      "columnPace": "Ritmo",
+      "footnote": "Il ritmo proietta il risultato di stasera in base al passo attuale. Gli sguardi sono silenziosi. Nessuno sa che hai guardato.",
+      "peeksLeftOf": "{{remaining}} di {{limit}} sguardi rimasti",
+      "backToLeague": "Torna alla lega · {{seconds}}s",
+      "premium": "Premium",
+      "deniedHeading": "Era il tuo\nsguardo di oggi",
+      "deniedBody": "La versione gratuita ti dà uno sguardo al giorno. Premium te ne dà tre, abbastanza per controllare a pranzo, dopo il lavoro e appena prima che la tabella si chiuda.",
+      "getPremium": "Passa a Premium · 1,99 €/mese",
+      "waitFor2200": "Aspetta le 22:00"
+    },
+    "results": {
+      "scoresAreIn": "I punteggi sono arrivati",
+      "todaysWinner": "Il vincitore di oggi",
+      "deltaUp": "↑ {{count}}",
+      "deltaDown": "↓ {{count}}",
+      "walkedToday": "Oggi hai fatto {{steps}} passi.",
+      "walkedMovedUp": "Oggi hai fatto {{steps}} passi. Sei salito al {{rank}} posto.",
+      "walkedNowRank": "Oggi hai fatto {{steps}} passi. Ora sei al {{rank}} posto.",
+      "openLeague": "Apri la lega",
+      "sayInChat": "Scrivi qualcosa in chat"
+    },
+    "share": {
+      "top3": "Top 3",
+      "top5": "Top 5",
+      "justMe": "Solo io",
+      "captionPlaceholder": "Aggiungi una didascalia (opzionale), es. Il mese migliore di sempre",
+      "customize": "Personalizza",
+      "shareImage": "Condividi immagine",
+      "copyLink": "Copia link",
+      "saveToPhotos": "Salva nelle foto",
+      "working": "Un attimo…",
+      "share": "Condividi",
+      "appName": "Step League",
+      "cardEyebrow": "{{name}} · finale",
+      "winner": "Vincitore",
+      "winsLabel": "Vince: {{stakes}}",
+      "yourResult": "Il tuo risultato",
+      "placeLabel": "{{place}}° posto",
+      "lastPlaceLabel": "Ultimo posto: {{stakes}}",
+      "cardFooter": "{{date}} · {{memberCount}} membri · {{steps}} passi totali",
+      "dialogTitle": "Risultati di {{name}}",
+      "linkCopied": "Link copiato.",
+      "savedToPhotos": "Salvato nelle foto.",
+      "placeSteps": "{{place}}° posto, {{steps}} passi",
+      "winnerGetsLine": "\nIl vincitore ottiene: {{stakes}}",
+      "fallbackText": "{{name}} · classifica finale\n{{lines}}{{stakes}}{{captionLine}}\nCondiviso via Step League",
+      "errors": {
+        "shareFailed": "Impossibile condividere i risultati.",
+        "notAvailableOnWeb": "Il salvataggio delle foto non è disponibile nel browser.",
+        "photoAccessNeeded": "Serve l'accesso alla libreria foto per salvare la card dei risultati.",
+        "saveFailed": "Impossibile salvare l'immagine."
+      }
+    }
+  },
+  "onboarding": {
+    "location": {
+      "heading": "Dove sei?",
+      "subheading": "Serve per le classifiche per Città e Paese. Puoi cambiarlo più tardi nel profilo.",
+      "errors": {
+        "countries": "Impossibile caricare i paesi.",
+        "cities": "Impossibile caricare le città.",
+        "save": "Impossibile salvare la tua posizione."
+      }
+    },
+    "health": {
+      "heading": "Step League ha bisogno dei tuoi passi",
+      "subheading": "Il tuo telefono conta già i tuoi passi. Leggiamo quel numero una volta al giorno, così le tue leghe hanno qualcosa da confrontare. Nient'altro.",
+      "readRows": {
+        "whatWeRead": {
+          "title": "Cosa leggiamo",
+          "body": "Solo il totale giornaliero dei passi: un numero al giorno, alle 22:00."
+        },
+        "whoSeesIt": {
+          "title": "Chi lo vede",
+          "body": "Solo le leghe a cui ti unisci, e solo dopo le 22:00."
+        },
+        "whatWeNeverTouch": {
+          "title": "Cosa non tocchiamo mai",
+          "body": "Posizione, percorsi, battito cardiaco, allenamenti o qualsiasi altra cosa in Salute. Niente pubblicità, niente terze parti, nessun dato venduto."
+        }
+      },
+      "agreeLabel": "Accetto che Step League legga il mio conteggio giornaliero dei passi.",
+      "privacyNoteLink": "Nota sulla privacy · ~210 parole, linguaggio semplice.",
+      "notifyOptIn": "Mandami anche una notifica alle 22:00 quando arrivano i risultati. Opzionale, te lo chiederemo separatamente più avanti.",
+      "footnote": "Ora il telefono te lo chiederà. Puoi dire di no lì, o cambiarlo quando vuoi nel Profilo.",
+      "privacyNoteTitle": "Nota sulla privacy",
+      "privacyNoteBody": "Step League legge un solo numero dai dati sulla salute del tuo telefono: il totale dei passi di ogni giorno. Tutto qui: non la tua posizione, i tuoi percorsi, il battito cardiaco, gli allenamenti o qualsiasi altra cosa tracciata da Salute/Health Connect.\n\nQuel totale giornaliero viene scritto nel nostro database (Supabase) collegato al tuo account, così può essere confrontato con gli altri membri delle leghe a cui scegli di unirti. Le classifiche mostrano sempre e solo il totale di ieri e dei giorni precedenti. Il conteggio di oggi resta privato fino all'aggiornamento delle 22:00, ogni giorno, senza eccezioni.\n\nNon facciamo pubblicità e non abbiamo SDK di analisi o pubblicitari che leggano questi dati. Non li vendiamo, non li concediamo in licenza e non li condividiamo con terze parti. Non vengono usati per addestrare nessun modello. Le uniche persone che possono vedere i tuoi totali di passi sono gli altri membri delle leghe a cui ti sei personalmente unito, e solo per i giorni già chiusi.\n\nSe lasci una lega, i tuoi totali passati restano visibili nella storia di quella lega, come per tutti gli altri. Uscire non nasconde retroattivamente le classifiche già chiuse. Puoi revocare l'accesso ai passi in qualsiasi momento dalle impostazioni Salute/Health Connect del telefono, oppure fermare la sincronizzazione dal Profilo di Step League. Eliminando il tuo account elimini anche la tua storia dei passi.\n\nUna sola persona gestisce questa app e legge questa nota proprio come la stai leggendo tu adesso: in modo semplice, dicendo sul serio ogni parola."
+    }
+  },
+  "premium": {
+    "headerLabel": "Step League Premium",
+    "perMonth": "/ mese",
+    "pitch": "Una persona sola, una bolletta del server, niente pubblicità e nessun dato venduto. Due euro tengono il contatore acceso e ti danno le tre cose più richieste.",
+    "notLiveYet": "Premium non è ancora attivo",
+    "finishingSetup": "Stiamo finendo di impostare i pagamenti. Ripassa presto.",
+    "priceShort": "1,99 €/mese",
+    "features": {
+      "peeks": {
+        "title": "3 sguardi al giorno, non 1",
+        "body": "Guarda i punteggi in diretta quando vuoi. Controlla a pranzo, dopo il lavoro e prima che la tabella si chiuda."
+      },
+      "history": {
+        "title": "Tutta la tua storia",
+        "body": "Ogni lega, ogni anno, pattern per giorno della settimana e percentuali di vittoria che non avresti mai saputo."
+      },
+      "themes": {
+        "title": "5 temi in più",
+        "body": "Ciano, Ember, Viola, Mono e uno in più, oltre a ogni nuovo tema in arrivo."
+      }
+    },
+    "manage": {
+      "youArePremium": "Sei Premium",
+      "subtitle": "1,99 €/mese · tutte e tre le funzioni Premium sbloccate.",
+      "howToCancel": {
+        "title": "Come disdire",
+        "body": "Gli abbonamenti sono gestiti dall'App Store o da Google Play, non da Step League."
+      },
+      "onIphone": {
+        "title": "Su iPhone",
+        "body": "Impostazioni → il tuo nome → Abbonamenti → Step League → Disdici abbonamento."
+      },
+      "onAndroid": {
+        "title": "Su Android",
+        "body": "Google Play Store → icona profilo → Pagamenti e abbonamenti → Abbonamenti → Step League → Disdici."
+      },
+      "keepUntilBillingEnds": "Mantieni Premium fino alla fine del periodo di fatturazione in corso."
+    }
+  },
+  "themePicker": {
+    "previewing": "Anteprima di {{theme}} · torna al precedente tra {{seconds}}s",
+    "getPremium": "Passa a Premium",
+    "included": "Incluso",
+    "dark": "Scuro",
+    "light": "Chiaro",
+    "switchHint": "Puoi cambiarlo anche da Profilo → Aspetto.",
+    "premiumThemes": "Temi Premium",
+    "moreComing": "Altri\nin arrivo",
+    "newThemeCadence": "Un nuovo tema ogni poche versioni",
+    "previewFootnote": "Tocca un tema bloccato per provarlo in diretta per dieci secondi prima di chiedertelo.",
+    "unlockThemes": "Sblocca 5 temi · 1,99 €/mese",
+    "onSuffix": " · attivo",
+    "lockedSuffix": " 🔒"
+  },
+  "stats": {
+    "today": "Oggi",
+    "stepsOn": "Passi · {{date}}",
+    "hourlyUnavailable": "I dati orari non sono disponibili su questo dispositivo.",
+    "stepsThisMonth": "Passi questo mese",
+    "stepsThisYear": "Passi quest'anno",
+    "monthDaysLogged_one": "{{month}} · {{count}} giorno",
+    "monthDaysLogged_other": "{{month}} · {{count}} giorni",
+    "bestDay": "Giorno migliore",
+    "averagePerDay": "Media / giorno",
+    "daysOverGoal": "Giorni sopra l'obiettivo",
+    "yearToDate": "Da inizio anno",
+    "bestMonth": "Mese migliore",
+    "averagePerMonth": "Media / mese",
+    "periods": {
+      "day": "Giorno",
+      "month": "Mese",
+      "year": "Anno"
+    },
+    "history": {
+      "title": "Storico statistiche",
+      "trackingSince_one": "{{date}} – oggi · {{count}} giorno",
+      "trackingSince_other": "{{date}} – oggi · {{count}} giorni",
+      "noStepsYet": "Ancora nessun passo registrato",
+      "tabs": {
+        "leagues": "Leghe",
+        "year": "Anno",
+        "allTime": "Sempre"
+      },
+      "totalYear": "Totale {{year}}",
+      "totalAllTime": "Totale di sempre",
+      "dailyAvg": "Media giornaliera",
+      "winRate": "% vittorie",
+      "predictionsHeading": "Previsioni",
+      "predictionsFootnote": "Stime basate sul tuo ritmo recente: non è una garanzia, solo dove porta il trend di oggi.",
+      "monthlyAverage": "Media mensile",
+      "yearlyAverage": "Media annuale",
+      "byDayOfWeek": "Per giorno della settimana",
+      "everyLeaguePlayed": "Ogni lega che hai giocato",
+      "noLeaguesPlayed": "Non hai ancora giocato nessuna lega.",
+      "membersAndDuration_one": "{{count}} membro · {{duration}}",
+      "membersAndDuration_other": "{{count}} membri · {{duration}}",
+      "live": "in diretta",
+      "daysCount_one": "{{count}} giorno",
+      "daysCount_other": "{{count}} giorni",
+      "axisBest": "{{label}} · migliore",
+      "dowInsightEmpty": "Registra ancora qualche giorno per vedere il tuo andamento settimanale.",
+      "dowInsightSingle": "In media fai {{count}} passi di {{day}}.",
+      "dowInsightCompare": "{{bestDay}} è il tuo giorno migliore: circa {{multiplier}} volte la tua media di {{worstDay}}.",
+      "insightWithStreak": "{{insight}} La tua serie più lunga è di {{count}} giorni.",
+      "predictions": {
+        "yearEndPace": "Ritmo di fine anno",
+        "yearEndPaceCaption": "In base alla tua media dal 1° gennaio, proiettata al 31 dicembre.",
+        "trend": "Trend",
+        "trendCaption14": "Ultimi 14 giorni rispetto ai 14 precedenti.",
+        "trendCaption30": "Ultimi 30 giorni rispetto ai 30 precedenti.",
+        "consistency": "Costanza",
+        "consistencyCaptionYear": "Quota di giorni di quest'anno con passi registrati.",
+        "consistencyCaptionAllTime": "Quota di tutti i giorni tracciati con passi registrati.",
+        "nextMilestone": "Prossimo traguardo: {{milestone}}",
+        "nextMilestoneCaption": "Circa il {{date}}, al tuo ritmo degli ultimi 90 giorni.",
+        "daysApprox": "~{{count}}g"
+      }
+    }
+  }
+}

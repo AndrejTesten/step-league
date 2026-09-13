@@ -8,6 +8,12 @@
 -- them — the function itself checks, on every run, which users just
 -- crossed into their local 22:00-22:14 window (see index.ts).
 
+-- Note: whatever you paste into the command below (service-role key,
+-- cron secret) is stored in plaintext in cron.job.command — visible to
+-- anyone with SQL-editor/database access to this Supabase project, same as
+-- any other value pasted into the SQL editor. Fine for a solo project,
+-- worth knowing if this project ever gets other admins.
+
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 

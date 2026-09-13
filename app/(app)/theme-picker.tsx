@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,6 +21,7 @@ import type { ColorTheme } from '@/lib/types';
 const PREVIEW_SECONDS = 10;
 
 export default function ThemePicker() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { resolvedScheme, colorTheme, setColorTheme, setMode } = useThemeMode();
@@ -73,31 +75,31 @@ export default function ThemePicker() {
         {previewing && (
           <View style={[styles.previewBanner, { borderColor: colors.accent, backgroundColor: colors.accentWash }]}>
             <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodySemiBold, color: colors.accent }}>
-              Previewing {colorThemeLabel(previewing)} · reverts in {secondsLeft}s
+              {t('themePicker.previewing', { theme: colorThemeLabel(previewing), seconds: secondsLeft })}
             </Text>
             <Pressable onPress={() => router.push('/premium')} hitSlop={6}>
               <Text style={{ fontSize: 11, fontFamily: theme.fontFamily.bodyBold, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.accent }}>
-                Get premium
+                {t('themePicker.getPremium')}
               </Text>
             </Pressable>
           </View>
         )}
 
-        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Included</Text>
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{t('themePicker.included')}</Text>
         <View style={styles.grid2}>
-          <ModeSwatch label="Dark" active={resolvedScheme === 'dark'} scheme="dark" onPress={() => setMode('dark')} />
-          <ModeSwatch label="Light" active={resolvedScheme === 'light'} scheme="light" onPress={() => setMode('light')} />
+          <ModeSwatch label={t('themePicker.dark')} active={resolvedScheme === 'dark'} scheme="dark" onPress={() => setMode('dark')} />
+          <ModeSwatch label={t('themePicker.light')} active={resolvedScheme === 'light'} scheme="light" onPress={() => setMode('light')} />
         </View>
         <Text style={[styles.hint, { color: colors.textDim }]}>
-          You can also switch this from Profile → Appearance.
+          {t('themePicker.switchHint')}
         </Text>
 
         <View style={styles.premiumHeader}>
-          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Premium themes</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{t('themePicker.premiumThemes')}</Text>
           {!isPro && (
             <View style={[styles.priceChip, { backgroundColor: colors.accentChip }]}>
               <Text style={{ fontSize: 9, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: colors.accent }}>
-                €1.99/mo
+                {t('premium.priceShort')}
               </Text>
             </View>
           )}
@@ -122,16 +124,16 @@ export default function ThemePicker() {
           ))}
           <View style={[styles.comingSoon, { borderColor: colors.controlBorder }]}>
             <Text style={{ fontSize: 20, lineHeight: 20, fontFamily: theme.fontFamily.heading, color: colors.accent }}>
-              More{'\n'}coming
+              {t('themePicker.moreComing')}
             </Text>
             <Text style={{ marginTop: theme.space(1.5), fontSize: 10, lineHeight: 14, color: colors.textDim, fontFamily: theme.fontFamily.bodyMedium }}>
-              New theme every few releases
+              {t('themePicker.newThemeCadence')}
             </Text>
           </View>
         </View>
 
         <Text style={[styles.footnote, { color: colors.textDim }]}>
-          Tapping a locked theme previews it live for ten seconds before asking.
+          {t('themePicker.previewFootnote')}
         </Text>
 
         {!isPro && (
@@ -139,7 +141,7 @@ export default function ThemePicker() {
             onPress={() => router.push('/premium')}
             style={({ pressed }) => [styles.unlockButton, { backgroundColor: pressed ? colors.accentHover : colors.accent }]}
           >
-            <Text style={[styles.unlockButtonText, { color: colors.primaryText }]}>Unlock 5 themes · €1.99/mo</Text>
+            <Text style={[styles.unlockButtonText, { color: colors.primaryText }]}>{t('themePicker.unlockThemes')}</Text>
             <Text style={[styles.unlockButtonText, { color: colors.primaryText }]}>→</Text>
           </Pressable>
         )}
@@ -159,6 +161,7 @@ function ModeSwatch({
   scheme: 'dark' | 'light';
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const previewBg = scheme === 'dark' ? '#0b0c0a' : '#f2f4ee';
   const previewAccent = scheme === 'dark' ? '#ccff33' : '#5a7a00';
@@ -178,7 +181,7 @@ function ModeSwatch({
       </View>
       <Text style={[styles.swatchLabel, { color: active ? colors.accent : colors.textMuted }]}>
         {label}
-        {active ? ' · on' : ''}
+        {active ? t('themePicker.onSuffix') : ''}
       </Text>
     </Pressable>
   );
@@ -197,6 +200,7 @@ function ColorSwatch({
   previewing?: boolean;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const accents = ACCENT_PALETTES[themeKey].dark;
   return (
@@ -217,7 +221,7 @@ function ColorSwatch({
       </View>
       <Text style={[styles.swatchLabel, { color: active ? accents.accent : colors.textMuted }]} numberOfLines={1}>
         {colorThemeLabel(themeKey)}
-        {locked ? ' 🔒' : active ? ' · on' : ''}
+        {locked ? t('themePicker.lockedSuffix') : active ? t('themePicker.onSuffix') : ''}
       </Text>
     </Pressable>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,33 +9,8 @@ import { Button, Screen, Sheet } from '@/components/ui';
 import { useStepsConsent } from '@/lib/steps-consent';
 import { theme, useThemeColors } from '@/lib/theme';
 
-const READ_ROWS = [
-  {
-    ok: true,
-    title: 'What we read',
-    body: 'Daily step totals only — one number per day, at 22:00.',
-  },
-  {
-    ok: true,
-    title: 'Who sees it',
-    body: 'Only the leagues you join, and only after 22:00.',
-  },
-  {
-    ok: false,
-    title: 'What we never touch',
-    body: 'Location, routes, heart rate, workouts, or anything else in Health. No ads, no third parties, no data sold.',
-  },
-];
-
-const PRIVACY_NOTE = `Step League reads one number from your phone's health data: your total step count for each day. That's it — not your location, your routes, your heart rate, your workouts, or anything else Health/Health Connect tracks.
-
-That daily total is written to our database (Supabase) tied to your account, so it can be compared against the other members of leagues you choose to join. Standings only ever show yesterday's total and earlier — today's count stays private to you until the 22:00 rollup, every day, without exception.
-
-We don't run ads, and we don't have an analytics or advertising SDK that reads this data. We don't sell it, license it, or share it with any third party. It isn't used to train any model. The only people who can ever see your step totals are the other members of leagues you've personally joined, and only for days that have already locked in.
-
-If you leave a league, your past totals stay visible in that league's history the same way everyone else's do — leaving doesn't retroactively hide already-locked standings. You can revoke step access at any time from your phone's Health/Health Connect settings, or stop syncing from Step League's own Profile screen. Deleting your account deletes your step history along with it.
-
-One developer runs this app and reads this note the same way you're reading it now: plainly, and meaning every word.`;
+const READ_ROW_KEYS = ['whatWeRead', 'whoSeesIt', 'whatWeNeverTouch'] as const;
+const READ_ROW_OK = [true, true, false];
 
 /**
  * "Step access — in-app consent" (design screen 2u) — shown once, after
@@ -45,12 +21,19 @@ One developer runs this app and reads this note the same way you're reading it n
  * sensitive-permission prompt, not just the bare OS dialog.
  */
 export default function OnboardingHealth() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { setConsentGiven } = useStepsConsent();
   const [agreed, setAgreed] = useState(false);
   const [notifyOptIn, setNotifyOptIn] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+
+  const READ_ROWS = READ_ROW_KEYS.map((key, i) => ({
+    ok: READ_ROW_OK[i],
+    title: t(`onboarding.health.readRows.${key}.title`),
+    body: t(`onboarding.health.readRows.${key}.body`),
+  }));
 
   function handleContinue() {
     if (!agreed) return;
@@ -66,15 +49,14 @@ export default function OnboardingHealth() {
       >
         <AppMark size={44} />
 
-        <Text style={[styles.heading, { color: colors.text }]}>Step League needs your step count</Text>
+        <Text style={[styles.heading, { color: colors.text }]}>{t('onboarding.health.heading')}</Text>
         <Text style={[styles.body, { color: colors.textSubtle }]}>
-          Your phone already counts your steps. We read that number once a day so your leagues have something to
-          compare. Nothing else.
+          {t('onboarding.health.subheading')}
         </Text>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           {READ_ROWS.map((row, i) => (
-            <View key={row.title} style={[styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+            <View key={READ_ROW_KEYS[i]} style={[styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
               <View style={[styles.badge, { backgroundColor: row.ok ? colors.accent : colors.danger }]}>
                 <Text style={[styles.badgeGlyph, { color: row.ok ? colors.primaryText : '#ffffff' }]}>{row.ok ? '✓' : '✕'}</Text>
               </View>
@@ -91,9 +73,9 @@ export default function OnboardingHealth() {
             {agreed && <Text style={[styles.checkGlyph, { color: colors.primaryText }]}>✓</Text>}
           </View>
           <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-            I agree to Step League reading my daily step count.{'\n'}
+            {t('onboarding.health.agreeLabel')}{'\n'}
             <Text onPress={() => setPrivacyOpen(true)} style={{ color: colors.accent, fontFamily: theme.fontFamily.bodySemiBold }}>
-              Privacy note · ~210 words, plain language.
+              {t('onboarding.health.privacyNoteLink')}
             </Text>
           </Text>
         </Pressable>
@@ -103,22 +85,22 @@ export default function OnboardingHealth() {
             {notifyOptIn && <Text style={[styles.checkGlyph, { color: colors.primaryText }]}>✓</Text>}
           </View>
           <Text style={[styles.checkboxLabel, { color: colors.textMuted }]}>
-            Also send me one notification at 22:00 when scores land. Optional — asked separately later.
+            {t('onboarding.health.notifyOptIn')}
           </Text>
         </Pressable>
       </ScrollView>
 
       <View style={{ paddingHorizontal: theme.space(4.5), paddingBottom: insets.bottom + theme.space(3), gap: theme.space(2.5) }}>
-        <Button label="Continue" onPress={handleContinue} disabled={!agreed} arrow />
+        <Button label={t('common.continue')} onPress={handleContinue} disabled={!agreed} arrow />
         <Text style={[styles.footnote, { color: colors.textDim }]}>
-          Your phone will ask next. You can say no there, or change it any time in Profile.
+          {t('onboarding.health.footnote')}
         </Text>
       </View>
 
-      <Sheet visible={privacyOpen} onClose={() => setPrivacyOpen(false)} title="Privacy note">
+      <Sheet visible={privacyOpen} onClose={() => setPrivacyOpen(false)} title={t('onboarding.health.privacyNoteTitle')}>
         <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
           <Text style={{ fontSize: 14, lineHeight: 21, fontFamily: theme.fontFamily.bodyMedium, color: colors.textSubtle }}>
-            {PRIVACY_NOTE}
+            {t('onboarding.health.privacyNoteBody')}
           </Text>
         </ScrollView>
       </Sheet>

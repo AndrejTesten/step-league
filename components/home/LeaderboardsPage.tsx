@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 
 import { Input, Screen, SectionLabel, Tabs, Title } from '@/components/ui';
@@ -19,6 +20,7 @@ function useDebounced(value: string, delay: number): string {
 }
 
 export function LeaderboardsPage({ width }: { width: number }) {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const { profile } = useSession();
   const [scope, setScope] = useState<LeaderboardScope>('global');
@@ -40,11 +42,11 @@ export function LeaderboardsPage({ width }: { width: number }) {
 
   const scopeOptions = useMemo<{ value: LeaderboardScope; label: string }[]>(
     () => [
-      { value: 'global', label: 'World' },
-      { value: 'country', label: profile?.country ?? 'Country' },
-      { value: 'city', label: profile?.city ?? 'City' },
+      { value: 'global', label: t('home.leaderboards.world') },
+      { value: 'country', label: profile?.country ?? t('profile.location.country') },
+      { value: 'city', label: profile?.city ?? t('profile.location.city') },
     ],
-    [profile?.country, profile?.city]
+    [profile?.country, profile?.city, t]
   );
 
   const requestId = useRef(0);
@@ -72,16 +74,16 @@ export function LeaderboardsPage({ width }: { width: number }) {
       setHasMore(page.length === LEADERBOARD_PAGE_SIZE);
     } catch (e) {
       if (myRequest !== requestId.current) return;
-      setError(getErrorMessage(e, 'Could not load the leaderboard.'));
+      setError(getErrorMessage(e, t('home.leaderboards.errors.loadFailed')));
     } finally {
       if (myRequest === requestId.current) setLoading(false);
     }
   }, [scope, scopeValue, missingLocation, debouncedSearch]);
 
-  useEffect(() => {
-    loadFirstPage();
-  }, [loadFirstPage]);
-
+  // useFocusEffect already re-runs whenever loadFirstPage's identity changes
+  // (scope/search/etc.) as long as this screen is focused, so a plain
+  // mount-time useEffect calling the same function would just double every
+  // fetch — once here, once from the focus effect below.
   useFocusEffect(
     useCallback(() => {
       loadFirstPage();
@@ -105,39 +107,39 @@ export function LeaderboardsPage({ width }: { width: number }) {
     }
   }
 
-  const scopeLabel = scope === 'global' ? 'the world' : scopeValue ?? '';
+  const scopeLabel = scope === 'global' ? t('home.leaderboards.theWorld') : scopeValue ?? '';
   const topPercent = myRank ? Math.max(1, Math.round((myRank.rank / myRank.total) * 100)) : null;
 
   return (
     <Screen style={{ width, paddingTop: theme.space(14) }}>
-      <Title>Global</Title>
+      <Title>{t('home.leaderboards.title')}</Title>
       <View style={{ marginTop: theme.space(4) }}>
         <Tabs options={scopeOptions} value={scope} onChange={setScope} />
       </View>
 
       <View style={{ marginTop: theme.space(3) }}>
-        <Input placeholder="Search by name" value={search} onChangeText={setSearch} />
+        <Input placeholder={t('home.leaderboards.searchPlaceholder')} value={search} onChangeText={setSearch} />
       </View>
 
       {myRank && !missingLocation && (
         <View style={[styles.hero, { backgroundColor: colors.card }]}>
           <View>
-            <SectionLabel>Your place in {scopeLabel}</SectionLabel>
+            <SectionLabel>{t('home.leaderboards.yourPlaceIn', { scope: scopeLabel })}</SectionLabel>
             <Text style={[styles.heroValue, { color: colors.accent }]}>{myRank.rank.toLocaleString()}</Text>
           </View>
           <Text style={[styles.heroMeta, { color: colors.textMuted }]}>
-            of {myRank.total.toLocaleString()}
+            {t('home.leaderboards.ofTotal', { total: myRank.total.toLocaleString() })}
             {'\n'}
-            <Text style={{ color: colors.accent }}>top {topPercent}%</Text>
+            <Text style={{ color: colors.accent }}>{t('home.leaderboards.topPercent', { percent: topPercent })}</Text>
           </Text>
         </View>
       )}
 
       <View style={[styles.tableHeader, { borderBottomColor: colors.border }]}>
         <Text style={[styles.tableHeaderCell, { width: 34, color: colors.textDim }]}>#</Text>
-        <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>Walker</Text>
-        <Text style={[styles.tableHeaderCell, { width: 54, color: colors.textDim }]}>City</Text>
-        <Text style={[styles.tableHeaderCell, { width: 64, textAlign: 'right', color: colors.textDim }]}>Steps</Text>
+        <Text style={[styles.tableHeaderCell, { flex: 1, color: colors.textDim }]}>{t('home.leaderboards.columnWalker')}</Text>
+        <Text style={[styles.tableHeaderCell, { width: 54, color: colors.textDim }]}>{t('profile.location.city')}</Text>
+        <Text style={[styles.tableHeaderCell, { width: 64, textAlign: 'right', color: colors.textDim }]}>{t('home.leaderboards.columnSteps')}</Text>
       </View>
 
       <FlatList
@@ -157,8 +159,8 @@ export function LeaderboardsPage({ width }: { width: number }) {
                 {error
                   ? error
                   : missingLocation
-                    ? `Add your ${scope} in Profile to see this leaderboard.`
-                    : 'No one has recorded any steps here yet.'}
+                    ? t('home.leaderboards.addLocationInProfile', { scope: scope === 'city' ? t('profile.location.city') : t('profile.location.country') })
+                    : t('home.leaderboards.noStepsYet')}
               </Text>
             </View>
           ) : null
@@ -178,10 +180,10 @@ export function LeaderboardsPage({ width }: { width: number }) {
                 {item.rank}
               </Text>
               <Text style={[styles.name, { color: mine ? colors.accent : colors.text }]} numberOfLines={1}>
-                {mine ? 'You' : item.display_name}
+                {mine ? t('common.you') : item.display_name}
               </Text>
               <Text style={[styles.city, { color: colors.textMuted }]} numberOfLines={1}>
-                {item.city ?? '—'}
+                {item.city ?? '-'}
               </Text>
               <Text style={[styles.steps, { color: mine ? colors.accent : colors.text, fontVariant: ['tabular-nums'] }]}>
                 {item.total_steps.toLocaleString()}

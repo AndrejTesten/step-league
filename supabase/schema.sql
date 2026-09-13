@@ -22,15 +22,17 @@ create table if not exists public.profiles (
   avatar_url text,
   city text,
   country text,
-  roast_mode boolean not null default false,
   created_at timestamptz not null default now()
 );
 
 alter table public.profiles add column if not exists avatar_url text;
 alter table public.profiles add column if not exists city text;
 alter table public.profiles add column if not exists country text;
-alter table public.profiles add column if not exists roast_mode boolean not null default false;
 alter table public.profiles add column if not exists daily_goal integer not null default 10000 check (daily_goal > 0);
+-- roast_mode shipped in an earlier version and was removed along with the
+-- "roast mode" UI (see commit "Restyle leaderboards and leagues, remove
+-- roast mode") — dropped here too so it doesn't linger as dead schema.
+alter table public.profiles drop column if exists roast_mode;
 
 alter table public.profiles enable row level security;
 
@@ -189,12 +191,19 @@ create table if not exists public.daily_steps (
 
 alter table public.daily_steps enable row level security;
 
+-- No insert/update/delete policy for regular users at all, on purpose — the
+-- old "for all" policy here let a client issue a raw insert/update on their
+-- own daily_steps rows with only `steps >= 0` enforced, which meant setting
+-- an arbitrary step count for any day and winning every leaderboard/league
+-- it feeds. Every write now has to go through upsert_daily_steps_monotonic()
+-- (SECURITY DEFINER, below), the only place the monotonic/anti-cheat
+-- guarantee is enforced.
 drop policy if exists "users manage their own steps" on public.daily_steps;
-create policy "users manage their own steps"
-  on public.daily_steps for all
+drop policy if exists "users view their own steps" on public.daily_steps;
+create policy "users view their own steps"
+  on public.daily_steps for select
   to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using (user_id = auth.uid());
 
 drop policy if exists "league-mates can view today's live steps" on public.daily_steps;
 create policy "league-mates can view today's live steps"
@@ -209,6 +218,21 @@ create policy "league-mates can view today's live steps"
     )
   );
 
+-- lifetime_steps — a running total of daily_steps, maintained incrementally
+-- by upsert_daily_steps_monotonic() below instead of recomputed with
+-- sum(daily_steps.steps) on every leaderboard request. At friend-group
+-- scale the join+aggregate was fine; at real scale it's work proportional
+-- to every day of history of every user in scope, on every single request,
+-- forever. Reading one column instead is O(1) per user.
+alter table public.profiles add column if not exists lifetime_steps bigint not null default 0;
+
+-- One-time (and safe-to-repeat) backfill for rows that predate the column —
+-- only touches profiles still sitting at the default, so it never clobbers
+-- a value the incremental updates have already gotten right.
+update public.profiles p
+set lifetime_steps = coalesce((select sum(ds.steps) from public.daily_steps ds where ds.user_id = p.id), 0)
+where lifetime_steps = 0;
+
 -- HealthKit/Health Connect periodically *revise* a day's total, and not
 -- always upward — a contributing app can overcount a burst of arm motion as
 -- steps and correct it back down minutes later, or a permission hiccup can
@@ -218,19 +242,51 @@ create policy "league-mates can view today's live steps"
 -- existing and incoming value — atomically, so two concurrent syncs can't
 -- race each other into a lower result — means the count can only go up
 -- within a day, matching what every other step-counting app does.
+--
+-- Also maintains profiles.lifetime_steps (see below) incrementally: computes
+-- each affected day's real delta (0 if the incoming value doesn't actually
+-- raise it) *before* the upsert runs, using a temp table rather than nested
+-- JSON lookups so the arithmetic stays easy to verify by reading it. This is
+-- the only place daily_steps is ever written to, so it's the only place that
+-- needs to keep the running total honest.
 create or replace function public.upsert_daily_steps_monotonic(p_entries jsonb)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_delta bigint;
 begin
+  -- 120 calls per rolling 10 minutes — the client syncs roughly every 15s
+  -- while foregrounded (~40 calls/10min steady state), so this leaves
+  -- headroom for foreground/background bursts while still blocking a
+  -- compromised client from hammering this RPC to load the DB.
+  if not public.check_rate_limit('sync_steps', 120, 600) then
+    raise exception 'Too many step syncs — please slow down.';
+  end if;
+
+  create temporary table if not exists tmp_step_entries (date date primary key, steps integer) on commit drop;
+  delete from tmp_step_entries;
+  insert into tmp_step_entries (date, steps)
+  select (e->>'date')::date, (e->>'steps')::integer
+  from jsonb_array_elements(p_entries) as e;
+
+  select coalesce(sum(greatest(coalesce(ds.steps, 0), t.steps) - coalesce(ds.steps, 0)), 0)
+  into v_delta
+  from tmp_step_entries t
+  left join public.daily_steps ds on ds.user_id = auth.uid() and ds.date = t.date;
+
   insert into public.daily_steps (user_id, date, steps, updated_at)
-  select auth.uid(), (e->>'date')::date, (e->>'steps')::integer, now()
-  from jsonb_array_elements(p_entries) as e
+  select auth.uid(), t.date, t.steps, now()
+  from tmp_step_entries t
   on conflict (user_id, date) do update
     set steps = greatest(public.daily_steps.steps, excluded.steps),
         updated_at = excluded.updated_at;
+
+  if v_delta <> 0 then
+    update public.profiles set lifetime_steps = lifetime_steps + v_delta where id = auth.uid();
+  end if;
 end;
 $$;
 
@@ -383,12 +439,11 @@ grant execute on function public.get_league_preview(text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- get_leaderboard(scope, value, search, limit, offset) — the City / Country /
--- Global leaderboard tabs. Ranks every profile by lifetime total steps
--- (simplest definition that needs no timezone-aware "which day is it for
--- them" logic, unlike the friend-league leaderboard above). SECURITY DEFINER
--- so it can aggregate across every user's daily_steps without needing to open
--- up daily_steps' own RLS — callers only ever get back the aggregated total,
--- not raw rows.
+-- Global leaderboard tabs. Ranks every profile by lifetime_steps (see the
+-- running-total column above) — simplest definition that needs no
+-- timezone-aware "which day is it for them" logic, unlike the friend-league
+-- leaderboard above. SECURITY DEFINER so it can rank across every profile
+-- without needing to open up daily_steps' own RLS.
 -- p_scope is 'global' | 'city' | 'country'; p_value is the city/country name
 -- to filter to (ignored for 'global'). p_search matches display_name and is
 -- applied *after* ranking, so a searched-for user still shows their true
@@ -425,14 +480,12 @@ as $$
       p.avatar_url,
       p.city,
       p.country,
-      coalesce(sum(ds.steps), 0) as total_steps
+      p.lifetime_steps as total_steps
     from public.profiles p
-    left join public.daily_steps ds on ds.user_id = p.id
     where
       p_scope = 'global'
       or (p_scope = 'country' and p.country is not distinct from p_value)
       or (p_scope = 'city' and p.city is not distinct from p_value)
-    group by p.id, p.display_name, p.avatar_url, p.city, p.country
   ),
   ranked as (
     select *, rank() over (order by total_steps desc) as rank
@@ -468,14 +521,12 @@ as $$
   with scoped as (
     select
       p.id as user_id,
-      coalesce(sum(ds.steps), 0) as total_steps
+      p.lifetime_steps as total_steps
     from public.profiles p
-    left join public.daily_steps ds on ds.user_id = p.id
     where
       p_scope = 'global'
       or (p_scope = 'country' and p.country is not distinct from p_value)
       or (p_scope = 'city' and p.city is not distinct from p_value)
-    group by p.id
   ),
   ranked as (
     select *, rank() over (order by total_steps desc) as rank
@@ -899,7 +950,7 @@ alter table public.profiles add column if not exists color_theme text not null d
 -- way to actually carve out one column is to revoke the table-wide privilege
 -- entirely and re-grant UPDATE on an explicit allow-list of the columns the
 -- app's UI actually lets a user edit — leaving is_pro (and username,
--- display_name, timezone, roast_mode, created_at) off that list.
+-- display_name, timezone, created_at) off that list.
 --
 -- The service_role key — used only by Edge Functions / a verified-purchase
 -- webhook, never shipped to the app — bypasses grants entirely, so that
@@ -1043,21 +1094,15 @@ create index if not exists league_members_user_id_idx on public.league_members (
 create index if not exists leaderboard_snapshots_user_id_snapshot_date_idx on public.leaderboard_snapshots (user_id, snapshot_date);
 create index if not exists profiles_country_idx on public.profiles (country);
 create index if not exists profiles_city_idx on public.profiles (city);
+-- Lets get_leaderboard()'s rank() over (order by lifetime_steps desc) walk
+-- profiles in already-sorted order instead of sorting the whole table on
+-- every request — the single most-hit query in the app at real scale.
+create index if not exists profiles_lifetime_steps_idx on public.profiles (lifetime_steps desc);
 
--- ---------------------------------------------------------------------------
--- Known scaling limit, not fixed here: get_leaderboard() and
--- get_leaderboard_rank_summary() recompute every user's lifetime total by
--- summing the *entire* daily_steps table on every single call (the indexes
--- above make the city/country filtering and the join itself fast, but the
--- SUM(steps) aggregation is still real work proportional to how many
--- days of history exist across every user in scope). Fine for now; once
--- daily_steps has millions of rows, the fix is a denormalized running total
--- (e.g. profiles.lifetime_steps, maintained incrementally by
--- upsert_daily_steps_monotonic() instead of recomputed from scratch) —
--- deliberately not done in this pass since getting an incremental counter's
--- correctness wrong silently corrupts every leaderboard, and that's not a
--- change to make without dedicated testing.
--- ---------------------------------------------------------------------------
+-- (The scaling limit that used to be documented here — get_leaderboard()
+-- and get_leaderboard_rank_summary() re-summing all of daily_steps on every
+-- call — is fixed above: both now read profiles.lifetime_steps, a running
+-- total maintained incrementally by upsert_daily_steps_monotonic().)
 
 -- ---------------------------------------------------------------------------
 -- Rate limiting. use_peek() already had its own bespoke daily-quota table
@@ -1168,3 +1213,26 @@ create policy "users update their own reaction"
   to authenticated
   using (from_user_id = auth.uid())
   with check (from_user_id = auth.uid() and public.check_rate_limit('react', 30, 3600));
+
+-- ---------------------------------------------------------------------------
+-- get_due_profile_ids — used by the nightly-rollup Edge Function. Computes
+-- "whose local time is currently 22:00-22:14" in SQL and returns just those
+-- ids, instead of the function pulling every profile's (id, timezone) row
+-- on every 15-minute tick only to throw almost all of them away in JS. At
+-- 100k profiles that was 100k rows fetched 96 times a day for the ~1% of
+-- rows actually due; this returns O(due users) rows instead.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_due_profile_ids(p_now timestamptz default now())
+returns table (id uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id
+  from public.profiles p
+  where extract(hour from (p_now at time zone coalesce(p.timezone, 'UTC')))::int = 22
+    and extract(minute from (p_now at time zone coalesce(p.timezone, 'UTC')))::int < 15;
+$$;
+
+grant execute on function public.get_due_profile_ids(timestamptz) to service_role;

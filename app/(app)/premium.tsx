@@ -1,24 +1,12 @@
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSession } from '@/lib/auth-context';
 import { theme, useThemeColors, type ThemeColors } from '@/lib/theme';
 
-const FEATURES = [
-  {
-    title: '3 peeks a day, not 1',
-    body: 'See live scores whenever you want. Check at lunch, after work, and before the table locks.',
-  },
-  {
-    title: 'Your whole history',
-    body: "Every league, every year, day-of-week patterns and win rates you'd never have known.",
-  },
-  {
-    title: '5 extra themes',
-    body: 'Cyan, Ember, Violet, Mono, and one more — plus every new one after.',
-  },
-];
+const FEATURE_KEYS = ['peeks', 'history', 'themes'] as const;
 
 /**
  * The €1.99/mo paywall (design screen "2t") — reached from Peek's limit
@@ -40,9 +28,15 @@ const FEATURES = [
  * matches whichever of the 6 color themes is active.
  */
 export default function Premium() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { profile } = useSession();
+  const FEATURES = FEATURE_KEYS.map((key) => ({
+    key,
+    title: t(`premium.features.${key}.title`),
+    body: t(`premium.features.${key}.body`),
+  }));
 
   if (profile?.is_pro) {
     return <ManagePremium colors={colors} insets={insets} />;
@@ -57,7 +51,7 @@ export default function Premium() {
           <View style={[styles.mark, { backgroundColor: ink }]}>
             <Text style={[styles.markText, { color: colors.accent }]}>SL</Text>
           </View>
-          <Text style={[styles.headerLabel, { color: ink }]}>Step League Premium</Text>
+          <Text style={[styles.headerLabel, { color: ink }]}>{t('premium.headerLabel')}</Text>
         </View>
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Text style={[styles.close, { color: ink }]}>✕</Text>
@@ -66,17 +60,16 @@ export default function Premium() {
 
       <View style={{ paddingHorizontal: theme.space(5.5), paddingBottom: theme.space(5) }}>
         <Text style={[styles.price, { color: ink }]}>
-          €1.99<Text style={[styles.priceSuffix, { color: ink }]}> / month</Text>
+          €1.99<Text style={[styles.priceSuffix, { color: ink }]}> {t('premium.perMonth')}</Text>
         </Text>
         <Text style={[styles.pitch, { color: ink }]}>
-          One developer, one server bill, no ads and no data sold. Two euros keeps the counter running — and gets
-          you the three things people ask for most.
+          {t('premium.pitch')}
         </Text>
       </View>
 
       <View style={[styles.featureCard, { backgroundColor: colors.accentDark }]}>
         {FEATURES.map((f, i) => (
-          <View key={f.title} style={[styles.featureRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+          <View key={f.key} style={[styles.featureRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
             <View style={[styles.featureIconBox, { backgroundColor: colors.accentChip }]}>
               <FeatureGlyph index={i} color={colors.accent} altColor={colors.accentDark} />
             </View>
@@ -92,13 +85,13 @@ export default function Premium() {
 
       <View style={[styles.actions, { paddingBottom: insets.bottom + theme.space(4) }]}>
         <View style={[styles.primaryButton, { backgroundColor: colors.accentDark, opacity: 0.6 }]}>
-          <Text style={[styles.primaryButtonText, { color: colors.text }]}>Premium isn't live yet</Text>
+          <Text style={[styles.primaryButtonText, { color: colors.text }]}>{t('premium.notLiveYet')}</Text>
         </View>
         <Text style={[styles.fineprint, { color: ink }]}>
-          We're finishing payment setup — check back soon.
+          {t('premium.finishingSetup')}
         </Text>
         <Pressable onPress={() => router.back()} hitSlop={8} style={{ alignSelf: 'center' }}>
-          <Text style={[styles.notNow, { color: ink }]}>Back</Text>
+          <Text style={[styles.notNow, { color: ink }]}>{t('common.back')}</Text>
         </Pressable>
       </View>
     </View>
@@ -113,6 +106,7 @@ export default function Premium() {
  * once real StoreKit/Play Billing is wired up.
  */
 function ManagePremium({ colors, insets }: { colors: ThemeColors; insets: { bottom: number } }) {
+  const { t } = useTranslation();
   const ink = colors.primaryText;
 
   return (
@@ -122,7 +116,7 @@ function ManagePremium({ colors, insets }: { colors: ThemeColors; insets: { bott
           <View style={[styles.mark, { backgroundColor: ink }]}>
             <Text style={[styles.markText, { color: colors.accent }]}>SL</Text>
           </View>
-          <Text style={[styles.headerLabel, { color: ink }]}>Step League Premium</Text>
+          <Text style={[styles.headerLabel, { color: ink }]}>{t('premium.headerLabel')}</Text>
         </View>
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Text style={[styles.close, { color: ink }]}>✕</Text>
@@ -130,29 +124,29 @@ function ManagePremium({ colors, insets }: { colors: ThemeColors; insets: { bott
       </View>
 
       <View style={{ paddingHorizontal: theme.space(5.5), paddingBottom: theme.space(5) }}>
-        <Text style={[styles.price, { color: ink, fontSize: 34, lineHeight: 32 }]}>You're premium</Text>
-        <Text style={[styles.pitch, { color: ink }]}>€1.99/month · all three premium features unlocked.</Text>
+        <Text style={[styles.price, { color: ink, fontSize: 34, lineHeight: 32 }]}>{t('premium.manage.youArePremium')}</Text>
+        <Text style={[styles.pitch, { color: ink }]}>{t('premium.manage.subtitle')}</Text>
       </View>
 
       <View style={[styles.featureCard, { backgroundColor: colors.accentDark }]}>
         <View style={styles.featureRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.featureTitle, { color: colors.text }]}>How to cancel</Text>
+            <Text style={[styles.featureTitle, { color: colors.text }]}>{t('premium.manage.howToCancel.title')}</Text>
             <Text style={[styles.featureBody, { color: colors.textMuted }]}>
-              Subscriptions are managed by the App Store or Google Play, not inside Step League.
+              {t('premium.manage.howToCancel.body')}
             </Text>
           </View>
         </View>
         <View style={[styles.featureRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.featureTitle, { color: colors.text }]}>On iPhone</Text>
-            <Text style={[styles.featureBody, { color: colors.textMuted }]}>Settings → your name → Subscriptions → Step League → Cancel Subscription.</Text>
+            <Text style={[styles.featureTitle, { color: colors.text }]}>{t('premium.manage.onIphone.title')}</Text>
+            <Text style={[styles.featureBody, { color: colors.textMuted }]}>{t('premium.manage.onIphone.body')}</Text>
           </View>
         </View>
         <View style={[styles.featureRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.featureTitle, { color: colors.text }]}>On Android</Text>
-            <Text style={[styles.featureBody, { color: colors.textMuted }]}>Google Play Store → profile icon → Payments & subscriptions → Subscriptions → Step League → Cancel.</Text>
+            <Text style={[styles.featureTitle, { color: colors.text }]}>{t('premium.manage.onAndroid.title')}</Text>
+            <Text style={[styles.featureBody, { color: colors.textMuted }]}>{t('premium.manage.onAndroid.body')}</Text>
           </View>
         </View>
       </View>
@@ -160,9 +154,9 @@ function ManagePremium({ colors, insets }: { colors: ThemeColors; insets: { bott
       <View style={{ flex: 1 }} />
 
       <View style={[styles.actions, { paddingBottom: insets.bottom + theme.space(4) }]}>
-        <Text style={[styles.fineprint, { color: ink }]}>You keep premium until the current billing period ends.</Text>
+        <Text style={[styles.fineprint, { color: ink }]}>{t('premium.manage.keepUntilBillingEnds')}</Text>
         <Pressable onPress={() => router.back()} hitSlop={8} style={{ alignSelf: 'center' }}>
-          <Text style={[styles.notNow, { color: ink }]}>Back</Text>
+          <Text style={[styles.notNow, { color: ink }]}>{t('common.back')}</Text>
         </Pressable>
       </View>
     </View>

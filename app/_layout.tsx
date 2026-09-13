@@ -9,11 +9,13 @@ import {
 } from '@expo-google-fonts/space-grotesk';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SessionProvider, useSession } from '@/lib/auth-context';
+import { I18nProvider } from '@/lib/i18n';
 import { initSentry, Sentry } from '@/lib/sentry';
 import { StepsConsentProvider } from '@/lib/steps-consent';
 import { ThemeProvider } from '@/lib/theme';
@@ -26,17 +28,18 @@ initSentry();
 // the tree below (potentially ThemeProvider itself) has already thrown, so
 // it can't depend on that tree's own context being in a working state.
 function ErrorFallback({ resetError }: { resetError: () => void }) {
+  const { t } = useTranslation();
   return (
     <View style={{ flex: 1, backgroundColor: '#0b0c0a', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
-      <Text style={{ color: '#f2f4ee', fontSize: 20, fontWeight: '700', textAlign: 'center' }}>Something went wrong</Text>
+      <Text style={{ color: '#f2f4ee', fontSize: 20, fontWeight: '700', textAlign: 'center' }}>{t('app.error.title')}</Text>
       <Text style={{ color: '#8b9084', fontSize: 13, textAlign: 'center', lineHeight: 19 }}>
-        It's been reported automatically. Try again — if it keeps happening, close and reopen the app.
+        {t('app.error.message')}
       </Text>
       <Pressable
         onPress={resetError}
         style={{ backgroundColor: '#ccff33', paddingHorizontal: 28, paddingVertical: 13, borderRadius: 6, marginTop: 8 }}
       >
-        <Text style={{ color: '#0b0c0a', fontSize: 13, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>Try again</Text>
+        <Text style={{ color: '#0b0c0a', fontSize: 13, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>{t('common.tryAgain')}</Text>
       </Pressable>
     </View>
   );
@@ -55,15 +58,17 @@ function RootLayout() {
     <Sentry.ErrorBoundary fallback={({ resetError }) => <ErrorFallback resetError={resetError} />}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
-          <ThemeProvider>
-            <ToastProvider>
-              <SessionProvider>
-                <StepsConsentProvider>
-                  <RootNavigator fontsLoaded={fontsLoaded} />
-                </StepsConsentProvider>
-              </SessionProvider>
-            </ToastProvider>
-          </ThemeProvider>
+          <I18nProvider>
+            <ThemeProvider>
+              <ToastProvider>
+                <SessionProvider>
+                  <StepsConsentProvider>
+                    <RootNavigator fontsLoaded={fontsLoaded} />
+                  </StepsConsentProvider>
+                </SessionProvider>
+              </ToastProvider>
+            </ThemeProvider>
+          </I18nProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </Sentry.ErrorBoundary>

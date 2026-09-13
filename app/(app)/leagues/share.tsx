@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
+import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
@@ -14,27 +15,6 @@ import type { LeaderboardRow, League } from '@/lib/types';
 
 type RowLimit = 3 | 5 | 'me';
 
-function ordinalWord(n: number): string {
-  const v = n % 100;
-  if (v >= 11 && v <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1:
-      return `${n}st`;
-    case 2:
-      return `${n}nd`;
-    case 3:
-      return `${n}rd`;
-    default:
-      return `${n}th`;
-  }
-}
-
-const ROW_LIMIT_OPTIONS: { value: RowLimit; label: string }[] = [
-  { value: 3, label: 'Top 3' },
-  { value: 5, label: 'Top 5' },
-  { value: 'me', label: 'Just me' },
-];
-
 /**
  * Share a league's final standings (design screen "2n") — reachable from
  * the "Share final table" button on a finished league. The card below is
@@ -46,6 +26,12 @@ const ROW_LIMIT_OPTIONS: { value: RowLimit; label: string }[] = [
  * real image.
  */
 export default function ShareResults() {
+  const { t, i18n } = useTranslation();
+  const ROW_LIMIT_OPTIONS: { value: RowLimit; label: string }[] = [
+    { value: 3, label: t('leagues.share.top3') },
+    { value: 5, label: t('leagues.share.top5') },
+    { value: 'me', label: t('leagues.share.justMe') },
+  ];
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
@@ -74,15 +60,21 @@ export default function ShareResults() {
   const inviteLink = league ? `stepleague://join/${league.invite_code}` : '';
   const visibleRows = rowLimit === 'me' ? [] : rows.slice(1, rowLimit);
 
+  function ordinalWord(n: number): string {
+    return t('home.stepCounter.rankOrdinal', { count: n, ordinal: true });
+  }
+
   function fallbackText(): string {
     if (!league) return '';
     const lines =
       rowLimit === 'me' && myRow
-        ? [`${ordinalWord(myRow.rank)} place, ${myRow.total_steps.toLocaleString()} steps`]
-        : rows.slice(0, rowLimit === 'me' ? 5 : rowLimit).map((r, i) => `${i + 1}. ${r.is_me ? 'You' : r.display_name} — ${r.total_steps.toLocaleString()}`);
-    const stakes = league.winner_stakes ? `\nWinner gets: ${league.winner_stakes}` : '';
+        ? [t('leagues.share.placeSteps', { place: ordinalWord(myRow.rank), steps: myRow.total_steps.toLocaleString() })]
+        : rows
+            .slice(0, rowLimit === 'me' ? 5 : rowLimit)
+            .map((r, i) => `${i + 1}. ${r.is_me ? t('common.you') : r.display_name}: ${r.total_steps.toLocaleString()}`);
+    const stakes = league.winner_stakes ? t('leagues.share.winnerGetsLine', { stakes: league.winner_stakes }) : '';
     const captionLine = caption.trim() ? `\n"${caption.trim()}"` : '';
-    return `${league.name} — final standings\n${lines.join('\n')}${stakes}${captionLine}\n— Step League`;
+    return t('leagues.share.fallbackText', { name: league.name, lines: lines.join('\n'), stakes, captionLine });
   }
 
   async function captureCardImage(): Promise<string> {
@@ -99,9 +91,9 @@ export default function ShareResults() {
         return;
       }
       const uri = await captureCardImage();
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: `${league?.name ?? 'League'} results` });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: t('leagues.share.dialogTitle', { name: league?.name ?? t('leagues.peek.leagueFallback') }) });
     } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Could not share the results.');
+      showToast(e instanceof Error ? e.message : t('leagues.share.errors.shareFailed'));
     } finally {
       setBusy(null);
     }
@@ -110,13 +102,13 @@ export default function ShareResults() {
   async function handleCopyLink() {
     if (!inviteLink) return;
     await Clipboard.setStringAsync(inviteLink);
-    showToast('Link copied.');
+    showToast(t('leagues.share.linkCopied'));
   }
 
   async function handleSaveToPhotos() {
     if (busy) return;
     if (Platform.OS === 'web') {
-      showToast("Saving photos isn't available in the browser.");
+      showToast(t('leagues.share.errors.notAvailableOnWeb'));
       return;
     }
     setBusy('save');
@@ -129,14 +121,14 @@ export default function ShareResults() {
       const MediaLibrary = await import('expo-media-library');
       const permission = await MediaLibrary.requestPermissionsAsync(true);
       if (!permission.granted) {
-        showToast('Photo library access is needed to save the results card.');
+        showToast(t('leagues.share.errors.photoAccessNeeded'));
         return;
       }
       const uri = await captureCardImage();
       await MediaLibrary.saveToLibraryAsync(uri);
-      showToast('Saved to photos.');
+      showToast(t('leagues.share.savedToPhotos'));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Could not save the image.');
+      showToast(e instanceof Error ? e.message : t('leagues.share.errors.saveFailed'));
     } finally {
       setBusy(null);
     }
@@ -145,7 +137,7 @@ export default function ShareResults() {
   if (loading || !league) {
     return (
       <Screen style={{ paddingTop: theme.space(6) }}>
-        <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>Loading…</Text>
+        <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium }}>{t('common.loading')}</Text>
       </Screen>
     );
   }
@@ -158,24 +150,24 @@ export default function ShareResults() {
       >
         <View ref={cardRef} collapsable={false} style={[styles.shareCard, { backgroundColor: colors.accent }]}>
           <View style={styles.shareCardHeader}>
-            <Text style={[styles.shareCardEyebrow, { color: colors.primaryText }]}>{league.name} · final</Text>
+            <Text style={[styles.shareCardEyebrow, { color: colors.primaryText }]}>{t('leagues.share.cardEyebrow', { name: league.name })}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space(1.5) }}>
               <View style={[styles.shareCardMark, { backgroundColor: colors.primaryText }]}>
                 <Text style={[styles.shareCardMarkText, { color: colors.accent }]}>SL</Text>
               </View>
-              <Text style={[styles.shareCardEyebrow, { color: colors.primaryText }]}>Step League</Text>
+              <Text style={[styles.shareCardEyebrow, { color: colors.primaryText }]}>{t('leagues.share.appName')}</Text>
             </View>
           </View>
 
           {winner && (
             <View>
-              <Text style={[styles.shareCardLabel, { color: colors.primaryText }]}>Winner</Text>
+              <Text style={[styles.shareCardLabel, { color: colors.primaryText }]}>{t('leagues.share.winner')}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: theme.space(3), marginTop: theme.space(2) }}>
                 <Text style={[styles.shareCardWinner, { color: colors.primaryText }]}>{winner.display_name}</Text>
                 <Text style={[styles.shareCardWinnerSteps, { color: colors.primaryText }]}>{winner.total_steps.toLocaleString()}</Text>
               </View>
               {league.winner_stakes && (
-                <Text style={[styles.shareCardStakes, { color: colors.primaryText }]}>Wins: {league.winner_stakes}</Text>
+                <Text style={[styles.shareCardStakes, { color: colors.primaryText }]}>{t('leagues.share.winsLabel', { stakes: league.winner_stakes })}</Text>
               )}
             </View>
           )}
@@ -187,8 +179,8 @@ export default function ShareResults() {
             myRow.rank !== 1 && (
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: theme.space(3) }}>
                 <Text style={[styles.shareCardLabel, { color: colors.primaryText }]}>
-                  Your result{'\n'}
-                  <Text style={[styles.shareCardWinner, { color: colors.primaryText, fontSize: 26 }]}>{ordinalWord(myRow.rank)} place</Text>
+                  {t('leagues.share.yourResult')}{'\n'}
+                  <Text style={[styles.shareCardWinner, { color: colors.primaryText, fontSize: 26 }]}>{t('leagues.share.placeLabel', { place: ordinalWord(myRow.rank) })}</Text>
                 </Text>
                 <Text style={[styles.shareCardWinnerSteps, { color: colors.primaryText }]}>{myRow.total_steps.toLocaleString()}</Text>
               </View>
@@ -199,7 +191,7 @@ export default function ShareResults() {
                 <View key={r.user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space(2.5) }}>
                   <Text style={[styles.shareCardRank, { color: colors.primaryText }, i > 0 && { opacity: 0.75 }]}>{i + 2}</Text>
                   <Text style={[styles.shareCardName, { color: colors.primaryText }, i > 0 && { opacity: 0.75 }]} numberOfLines={1}>
-                    {r.is_me ? 'You' : r.display_name}
+                    {r.is_me ? t('common.you') : r.display_name}
                   </Text>
                   <Text style={[styles.shareCardSteps, { color: colors.primaryText }, i > 0 && { opacity: 0.75 }]}>{r.total_steps.toLocaleString()}</Text>
                 </View>
@@ -213,22 +205,25 @@ export default function ShareResults() {
             <Text style={[styles.shareCardCaption, { color: colors.primaryText }]}>"{caption.trim()}"</Text>
           )}
           {league.loser_stakes && (
-            <Text style={[styles.shareCardMeta, { color: colors.primaryText }]}>Last place: {league.loser_stakes}</Text>
+            <Text style={[styles.shareCardMeta, { color: colors.primaryText }]}>{t('leagues.share.lastPlaceLabel', { stakes: league.loser_stakes })}</Text>
           )}
           <Text style={[styles.shareCardMeta, { color: colors.primaryText }]}>
-            {new Date(league.deadline).toLocaleDateString()} · {rows.length} members · {totalSteps.toLocaleString()} steps
-            walked
+            {t('leagues.share.cardFooter', {
+              date: new Date(league.deadline).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+              memberCount: rows.length,
+              steps: totalSteps.toLocaleString(),
+            })}
           </Text>
         </View>
 
         <View style={{ gap: theme.space(2.5) }}>
-          <SectionLabel>Customize</SectionLabel>
+          <SectionLabel>{t('leagues.share.customize')}</SectionLabel>
           <View style={styles.rowLimitRow}>
             {ROW_LIMIT_OPTIONS.map((opt) => {
               const active = opt.value === rowLimit;
               return (
                 <Pressable
-                  key={opt.label}
+                  key={String(opt.value)}
                   onPress={() => setRowLimit(opt.value)}
                   style={[styles.rowLimitChip, active ? { backgroundColor: colors.accent } : { borderWidth: theme.border, borderColor: colors.controlBorder }]}
                 >
@@ -240,7 +235,7 @@ export default function ShareResults() {
             })}
           </View>
           <Input
-            placeholder="Add a caption (optional) — e.g. Best month ever"
+            placeholder={t('leagues.share.captionPlaceholder')}
             value={caption}
             onChangeText={setCaption}
             maxLength={60}
@@ -249,13 +244,13 @@ export default function ShareResults() {
 
         <View>
           <Pressable onPress={handleShareImage} disabled={busy !== null} style={[styles.infoRow, { borderTopColor: colors.border, opacity: busy ? 0.5 : 1 }]}>
-            <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>Share image</Text>
+            <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>{t('leagues.share.shareImage')}</Text>
             <Text style={{ fontSize: 10, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.textMuted }}>
-              {busy === 'share' ? 'Working…' : 'PNG'}
+              {busy === 'share' ? t('leagues.share.working') : 'PNG'}
             </Text>
           </Pressable>
           <Pressable onPress={handleCopyLink} style={[styles.infoRow, { borderTopColor: colors.border }]}>
-            <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>Copy link</Text>
+            <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>{t('leagues.share.copyLink')}</Text>
             <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>{inviteLink}</Text>
           </Pressable>
           <Pressable
@@ -263,8 +258,8 @@ export default function ShareResults() {
             disabled={busy !== null}
             style={[styles.infoRow, { borderTopColor: colors.border, borderBottomWidth: theme.border, borderBottomColor: colors.border, opacity: busy ? 0.5 : 1 }]}
           >
-            <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>Save to photos</Text>
-            <Text style={{ fontSize: 14, color: colors.textMuted }}>{busy === 'save' ? 'Working…' : '→'}</Text>
+            <Text style={{ fontSize: 14, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>{t('leagues.share.saveToPhotos')}</Text>
+            <Text style={{ fontSize: 14, color: colors.textMuted }}>{busy === 'save' ? t('leagues.share.working') : '→'}</Text>
           </Pressable>
         </View>
 
@@ -273,7 +268,7 @@ export default function ShareResults() {
           disabled={busy !== null}
           style={({ pressed }) => [styles.primaryButton, { backgroundColor: pressed ? colors.accentHover : colors.accent, opacity: busy ? 0.7 : 1 }]}
         >
-          <Text style={[styles.primaryButtonText, { color: colors.primaryText }]}>Share</Text>
+          <Text style={[styles.primaryButtonText, { color: colors.primaryText }]}>{t('leagues.share.share')}</Text>
           <Text style={[styles.primaryButtonText, { color: colors.primaryText }]}>→</Text>
         </Pressable>
       </ScrollView>

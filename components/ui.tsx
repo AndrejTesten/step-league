@@ -1,4 +1,5 @@
 import { forwardRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Image,
@@ -191,17 +192,24 @@ export function SearchableSelect({
   onSelect,
   loading,
   disabled,
-  emptyMessage = 'No matches.',
+  emptyMessage,
   onQueryChange,
 }: SearchableSelectProps) {
+  const { t } = useTranslation();
   const colors = useThemeColors();
+  const resolvedEmptyMessage = emptyMessage ?? t('common.noMatches');
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
 
+  // Prefix match, not "contains anywhere" — a substring match on "Ljubljana"
+  // also matched unrelated entries that merely *contain* it, like a city's
+  // own internal districts ("Opčina Ljubljana-Bežigrad"), which is exactly
+  // what made picking a real city feel broken. Typing a city/country name
+  // now only ever surfaces things that actually start with it.
   const filtered = onQueryChange
     ? options.slice(0, 50)
     : query
-      ? options.filter((o) => o.toLowerCase().includes(query.toLowerCase())).slice(0, 50)
+      ? options.filter((o) => o.toLowerCase().startsWith(query.toLowerCase())).slice(0, 50)
       : options.slice(0, 50);
 
   return (
@@ -229,7 +237,7 @@ export function SearchableSelect({
             <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
               {filtered.length === 0 ? (
                 <Text style={[styles.muted, { color: colors.textMuted, padding: theme.space(3) }]}>
-                  {emptyMessage}
+                  {resolvedEmptyMessage}
                 </Text>
               ) : (
                 filtered.map((opt) => (

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +10,7 @@ import { useSession } from '@/lib/auth-context';
 import { theme, useThemeColors } from '@/lib/theme';
 
 export default function SignUp() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { signUp } = useSession();
@@ -23,7 +25,7 @@ export default function SignUp() {
   async function handleSignUp() {
     setError(null);
     if (!email || !password || !username || !displayName) {
-      setError('Fill in every field.');
+      setError(t('auth.signUp.fillAllFields'));
       return;
     }
     setLoading(true);
@@ -47,12 +49,12 @@ export default function SignUp() {
   if (confirmEmailSent) {
     return (
       <Screen style={{ justifyContent: 'center', gap: theme.space(3) }}>
-        <Title>Check your email</Title>
+        <Title>{t('auth.signUp.checkEmailTitle')}</Title>
         <Text style={{ fontFamily: theme.fontFamily.bodyMedium, color: colors.textSubtle }}>
-          We sent a confirmation link to {email}. Tap it, then come back and sign in.
+          {t('auth.signUp.checkEmailMessage', { email })}
         </Text>
         <Link href="/sign-in" asChild>
-          <Button label="Back to sign in" variant="secondary" />
+          <Button label={t('auth.signUp.backToSignIn')} variant="secondary" />
         </Link>
       </Screen>
     );
@@ -62,23 +64,23 @@ export default function SignUp() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen>
         <ScrollView contentContainerStyle={{ flexGrow: 1, paddingTop: theme.space(18) }} keyboardShouldPersistTaps="handled">
-          <AuthLogo tagline="Compete with friends, one league at a time." />
+          <AuthLogo tagline={t('auth.signUp.tagline')} />
 
           <View style={{ gap: theme.space(3), marginTop: theme.space(7) }}>
             <View style={{ gap: theme.space(2) }}>
-              <SectionLabel>Display name</SectionLabel>
+              <SectionLabel>{t('auth.signUp.displayNameLabel')}</SectionLabel>
               <Input placeholder="Maja Kowalska" value={displayName} onChangeText={setDisplayName} />
             </View>
             <View style={{ gap: theme.space(2) }}>
-              <SectionLabel>Username</SectionLabel>
+              <SectionLabel>{t('auth.signUp.usernameLabel')}</SectionLabel>
               <Input placeholder="maja" value={username} onChangeText={setUsername} />
             </View>
             <View style={{ gap: theme.space(2) }}>
-              <SectionLabel>Email</SectionLabel>
+              <SectionLabel>{t('auth.signIn.emailLabel')}</SectionLabel>
               <Input placeholder="you@example.com" keyboardType="email-address" value={email} onChangeText={setEmail} />
             </View>
             <View style={{ gap: theme.space(2) }}>
-              <SectionLabel>Password</SectionLabel>
+              <SectionLabel>{t('auth.signIn.passwordLabel')}</SectionLabel>
               <Input placeholder="••••••••" secureTextEntry value={password} onChangeText={setPassword} />
             </View>
 
@@ -88,7 +90,7 @@ export default function SignUp() {
               </Text>
             )}
 
-            <Button label="Sign up" onPress={handleSignUp} loading={loading} arrow />
+            <Button label={t('auth.signUp.submit')} onPress={handleSignUp} loading={loading} arrow />
 
             <SocialButtons />
           </View>
@@ -97,7 +99,7 @@ export default function SignUp() {
 
           <Link href="/sign-in" style={{ alignSelf: 'center', marginBottom: insets.bottom + theme.space(6) }}>
             <Text style={{ fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small, color: colors.textSubtle }}>
-              Already have an account? Sign in
+              {t('auth.signUp.noAccountFlip')}
             </Text>
           </Link>
         </ScrollView>

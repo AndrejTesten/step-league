@@ -8,18 +8,22 @@ function addDays(dateKey: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+type DailyStepsRow = { date: string; steps: number };
+
 /**
- * Today / this month / this year / all-time totals (home screen) plus the
- * best single day, current daily streak, and total days logged (feeds
- * lib/achievements.ts). One daily_steps fetch for all of it — simplest
- * option and plenty fast at friend-app scale (a few thousand rows per user
- * even after years of daily use).
+ * The one daily_steps fetch that getStepStats() and getDailyStepsMap() both
+ * need — pulled out so callers that want both (every screen that shows
+ * stats also wants the day-by-day map) can fetch once and derive both
+ * instead of hitting the same table twice. Plenty fast at friend-app scale
+ * (a few thousand rows per user even after years of daily use).
  */
-export async function getStepStats(userId: string, timezone: string): Promise<StepStats> {
+async function fetchDailyStepsRows(userId: string): Promise<DailyStepsRow[]> {
   const { data, error } = await supabase.from('daily_steps').select('date, steps').eq('user_id', userId);
   if (error) throw error;
+  return (data ?? []) as DailyStepsRow[];
+}
 
-  const rows = (data ?? []) as { date: string; steps: number }[];
+function computeStepStats(rows: DailyStepsRow[], timezone: string): StepStats {
   const today = dateKeyInTimezone(new Date(), timezone);
   const monthPrefix = today.slice(0, 7); // YYYY-MM
   const yearPrefix = today.slice(0, 4); // YYYY
@@ -63,9 +67,36 @@ export async function getStepStats(userId: string, timezone: string): Promise<St
   };
 }
 
+function toDailyStepsMap(rows: DailyStepsRow[]): Map<string, number> {
+  return new Map(rows.map((r) => [r.date, r.steps]));
+}
+
+/**
+ * Today / this month / this year / all-time totals (home screen) plus the
+ * best single day, current daily streak, and total days logged (feeds
+ * lib/achievements.ts).
+ */
+export async function getStepStats(userId: string, timezone: string): Promise<StepStats> {
+  const rows = await fetchDailyStepsRows(userId);
+  return computeStepStats(rows, timezone);
+}
+
 /** date (YYYY-MM-DD) -> steps, for the profile screen's contribution heatmap. */
 export async function getDailyStepsMap(userId: string): Promise<Map<string, number>> {
-  const { data, error } = await supabase.from('daily_steps').select('date, steps').eq('user_id', userId);
-  if (error) throw error;
-  return new Map((data ?? []).map((r) => [(r as { date: string }).date, (r as { steps: number }).steps]));
+  const rows = await fetchDailyStepsRows(userId);
+  return toDailyStepsMap(rows);
+}
+
+/**
+ * Fetches daily_steps once and derives both getStepStats() and
+ * getDailyStepsMap()'s results from it — every screen that shows stats also
+ * wants the day-by-day map, so calling this instead of both functions
+ * separately halves the daily_steps reads on those screens.
+ */
+export async function getStepStatsAndMap(
+  userId: string,
+  timezone: string
+): Promise<{ stats: StepStats; map: Map<string, number> }> {
+  const rows = await fetchDailyStepsRows(userId);
+  return { stats: computeStepStats(rows, timezone), map: toDailyStepsMap(rows) };
 }

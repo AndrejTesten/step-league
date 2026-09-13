@@ -1,26 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Tabs } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
 import { getMyLeaguesPlayed, getMySnapshotWinStats } from '@/lib/leagues';
-import { getDailyStepsMap, getStepStats } from '@/lib/stats';
+import { getStepStatsAndMap } from '@/lib/stats';
 import { theme, useThemeColors } from '@/lib/theme';
 import type { LeaguePlayedSummary, StepStats } from '@/lib/types';
 
 type Tab = 'leagues' | 'year' | 'alltime';
 type PredictionRow = { label: string; value: string; caption: string; accent?: boolean };
 
-const TAB_OPTIONS: { value: Tab; label: string }[] = [
-  { value: 'leagues', label: 'Leagues' },
-  { value: 'year', label: 'Year' },
-  { value: 'alltime', label: 'All-time' },
-];
-
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Locale-aware weekday/month abbreviations (the app's selected language, not
+// the device's — same convention used elsewhere for calendar labels, e.g.
+// YearView's month axis in stats.tsx) rather than a hardcoded English array.
+// Jan 1 2024 was a Monday, so offsetting from it gives Mon..Sun in order.
+// Functions, not constants, so they can be recomputed for the current
+// language instead of being frozen to whatever was active at first import.
+function dayLabels(locale: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => new Date(2024, 0, i + 1).toLocaleDateString(locale, { weekday: 'short' }));
+}
+function monthLabels(locale: string): string[] {
+  return Array.from({ length: 12 }, (_, i) => new Date(2024, i, 1).toLocaleDateString(locale, { month: 'short' }));
+}
 
 function dowIndex(dateKey: string): number {
   // getDay(): 0=Sun..6=Sat -> remap to 0=Mon..6=Sun to match DAY_LABELS.
@@ -28,19 +34,8 @@ function dowIndex(dateKey: string): number {
   return (d + 6) % 7;
 }
 
-function ordinal(n: number): string {
-  const v = n % 100;
-  if (v >= 11 && v <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1:
-      return `${n}st`;
-    case 2:
-      return `${n}nd`;
-    case 3:
-      return `${n}rd`;
-    default:
-      return `${n}th`;
-  }
+function ordinal(t: TFunction, n: number): string {
+  return t('home.stepCounter.rankOrdinal', { count: n, ordinal: true });
 }
 
 const MILESTONES = [100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000];
@@ -132,6 +127,12 @@ function longestStreak(dailyMap: Map<string, number>): number {
  * active day, matching the app's existing month/year stat conventions.
  */
 export default function StatsHistory() {
+  const { t, i18n } = useTranslation();
+  const TAB_OPTIONS: { value: Tab; label: string }[] = [
+    { value: 'leagues', label: t('stats.history.tabs.leagues') },
+    { value: 'year', label: t('stats.history.tabs.year') },
+    { value: 'alltime', label: t('stats.history.tabs.allTime') },
+  ];
   const insets = useSafeAreaInsets();
   const colors = useThemeColors();
   const { session, profile } = useSession();
@@ -149,8 +150,8 @@ export default function StatsHistory() {
 
   useEffect(() => {
     if (!session || !profile) return;
-    Promise.all([getStepStats(session.user.id, profile.timezone), getDailyStepsMap(session.user.id)])
-      .then(([s, map]) => {
+    getStepStatsAndMap(session.user.id, profile.timezone)
+      .then(({ stats: s, map }) => {
         setStats(s);
         setDailyMap(map);
       })
@@ -184,8 +185,11 @@ export default function StatsHistory() {
 
   const daysTracked = firstDateKey ? Math.round((Date.now() - Date.parse(`${firstDateKey}T00:00:00`)) / 86400000) + 1 : 0;
   const subtitle = firstDateKey
-    ? `${new Date(`${firstDateKey}T00:00:00`).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} – today · ${daysTracked} day${daysTracked === 1 ? '' : 's'}`
-    : 'No steps recorded yet';
+    ? t('stats.history.trackingSince', {
+        date: new Date(`${firstDateKey}T00:00:00`).toLocaleDateString(i18n.language, { month: 'short', year: 'numeric' }),
+        count: daysTracked,
+      })
+    : t('stats.history.noStepsYet');
 
   const yearActiveDays = useMemo(
     () => Array.from(dailyMap.entries()).filter(([k, v]) => k.startsWith(String(year)) && v > 0).length,
@@ -251,42 +255,44 @@ export default function StatsHistory() {
 
   const yearPredictions: PredictionRow[] = [
     ...(yearProjection
-      ? [{ label: 'Year-end pace', value: compactNumber(yearProjection), caption: 'At your average since Jan 1, projected to Dec 31.' }]
+      ? [{ label: t('stats.history.predictions.yearEndPace'), value: compactNumber(yearProjection), caption: t('stats.history.predictions.yearEndPaceCaption') }]
       : []),
     ...(yearTrend
       ? [
           {
-            label: 'Trend',
+            label: t('stats.history.predictions.trend'),
             value: `${yearTrend.pct > 0 ? '+' : ''}${yearTrend.pct}%`,
-            caption: 'Last 14 days vs. the 14 before that.',
+            caption: t('stats.history.predictions.trendCaption14'),
             accent: yearTrend.direction === 'up',
           },
         ]
       : []),
-    { label: 'Consistency', value: `${yearConsistency}%`, caption: 'Share of days this year with steps logged.' },
+    { label: t('stats.history.predictions.consistency'), value: `${yearConsistency}%`, caption: t('stats.history.predictions.consistencyCaptionYear') },
   ];
 
   const allTimePredictions: PredictionRow[] = [
     ...(milestone
       ? [
           {
-            label: `Next milestone: ${compactNumber(milestone.milestone)}`,
-            value: `~${milestone.days}d`,
-            caption: `Around ${milestone.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}, at your last 90 days' pace.`,
+            label: t('stats.history.predictions.nextMilestone', { milestone: compactNumber(milestone.milestone) }),
+            value: t('stats.history.predictions.daysApprox', { count: milestone.days }),
+            caption: t('stats.history.predictions.nextMilestoneCaption', {
+              date: milestone.date.toLocaleDateString(i18n.language, { month: 'short', day: 'numeric', year: 'numeric' }),
+            }),
           },
         ]
       : []),
     ...(allTimeTrend
       ? [
           {
-            label: 'Trend',
+            label: t('stats.history.predictions.trend'),
             value: `${allTimeTrend.pct > 0 ? '+' : ''}${allTimeTrend.pct}%`,
-            caption: 'Last 30 days vs. the 30 before that.',
+            caption: t('stats.history.predictions.trendCaption30'),
             accent: allTimeTrend.direction === 'up',
           },
         ]
       : []),
-    { label: 'Consistency', value: `${allTimeConsistency}%`, caption: 'Share of all tracked days with steps logged.' },
+    { label: t('stats.history.predictions.consistency'), value: `${allTimeConsistency}%`, caption: t('stats.history.predictions.consistencyCaptionAllTime') },
   ];
 
   if (!profile?.is_pro) return null;
@@ -299,13 +305,13 @@ export default function StatsHistory() {
             <Text style={{ fontSize: 22, color: colors.text }}>←</Text>
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.text }]}>Stat history</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('stats.history.title')}</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>{subtitle}</Text>
           </View>
         </View>
         <View style={[styles.premiumChip, { backgroundColor: colors.accentChip }]}>
           <Text style={{ fontSize: 9, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1.4, textTransform: 'uppercase', color: colors.accent }}>
-            Premium
+            {t('leagues.peek.premium')}
           </Text>
         </View>
       </View>
@@ -322,34 +328,34 @@ export default function StatsHistory() {
             <LeagueListSection leagues={leagues} />
           ) : tab === 'year' ? (
             <ScopeSection
-              totalLabel={`Total ${year}`}
+              totalLabel={t('stats.history.totalYear', { year })}
               total={stats?.year ?? 0}
               dailyAvg={yearDailyAvg}
               winRate={yearWinRate}
               predictions={yearPredictions}
-              chartTitle="Monthly average"
+              chartTitle={t('stats.history.monthlyAverage')}
               chartBars={monthAverages.map((m) => ({ key: String(m.month), value: m.avg }))}
-              chartAxis={monthlyAxis(monthAverages)}
+              chartAxis={monthlyAxis(t, i18n.language, monthAverages)}
               dow={yearDow}
               leagues={leagues}
-              insight={dowInsight(yearDow)}
+              insight={dowInsight(t, i18n.language, yearDow)}
             />
           ) : (
             <ScopeSection
-              totalLabel="Total all-time"
+              totalLabel={t('stats.history.totalAllTime')}
               total={stats?.allTime ?? 0}
               dailyAvg={allTimeDailyAvg}
               winRate={allTimeWinRate}
               predictions={allTimePredictions}
-              chartTitle="Yearly average"
+              chartTitle={t('stats.history.yearlyAverage')}
               chartBars={yearAverages.map((y) => ({ key: y.year, value: y.avg }))}
-              chartAxis={yearlyAxis(yearAverages)}
+              chartAxis={yearlyAxis(t, yearAverages)}
               dow={allTimeDow}
               leagues={leagues}
               insight={
                 streak > 1
-                  ? `${dowInsight(allTimeDow)} Your longest streak is ${streak} days.`
-                  : dowInsight(allTimeDow)
+                  ? t('stats.history.insightWithStreak', { insight: dowInsight(t, i18n.language, allTimeDow), count: streak })
+                  : dowInsight(t, i18n.language, allTimeDow)
               }
             />
           )}
@@ -359,27 +365,29 @@ export default function StatsHistory() {
   );
 }
 
-function monthlyAxis(monthAverages: { month: number; avg: number }[]): [string, string, string] {
+function monthlyAxis(t: TFunction, locale: string, monthAverages: { month: number; avg: number }[]): [string, string, string] {
+  const labels = monthLabels(locale);
   const withData = monthAverages.filter((m) => m.avg > 0);
   const best = withData.reduce((b, m) => (m.avg > (b?.avg ?? -1) ? m : b), withData[0]);
-  const bestLabel = best ? `${MONTH_LABELS[best.month - 1]} · best` : '—';
-  return [MONTH_LABELS[0], bestLabel, MONTH_LABELS[11]];
+  const bestLabel = best ? t('stats.history.axisBest', { label: labels[best.month - 1] }) : '-';
+  return [labels[0], bestLabel, labels[11]];
 }
 
-function yearlyAxis(yearAverages: { year: string; avg: number }[]): [string, string, string] {
-  if (yearAverages.length === 0) return ['—', '—', '—'];
+function yearlyAxis(t: TFunction, yearAverages: { year: string; avg: number }[]): [string, string, string] {
+  if (yearAverages.length === 0) return ['-', '-', '-'];
   const best = yearAverages.reduce((b, y) => (y.avg > b.avg ? y : b), yearAverages[0]);
-  return [yearAverages[0].year, `${best.year} · best`, yearAverages[yearAverages.length - 1].year];
+  return [yearAverages[0].year, t('stats.history.axisBest', { label: best.year }), yearAverages[yearAverages.length - 1].year];
 }
 
-function dowInsight(dow: number[]): string {
+function dowInsight(t: TFunction, locale: string, dow: number[]): string {
+  const labels = dayLabels(locale);
   const withData = dow.map((v, i) => ({ v, i })).filter((d) => d.v > 0);
-  if (withData.length === 0) return "Log a few more days to see your day-of-week pattern.";
+  if (withData.length === 0) return t('stats.history.dowInsightEmpty');
   const best = withData.reduce((b, d) => (d.v > b.v ? d : b));
   const worst = withData.reduce((b, d) => (d.v < b.v ? d : b));
-  if (best.i === worst.i) return `You average ${best.v.toLocaleString()} steps on ${DAY_LABELS[best.i]}s.`;
+  if (best.i === worst.i) return t('stats.history.dowInsightSingle', { count: best.v, day: labels[best.i] });
   const multiplier = Math.round((best.v / Math.max(1, worst.v)) * 10) / 10;
-  return `${DAY_LABELS[best.i]}s are your strongest day — about ${multiplier}x your ${DAY_LABELS[worst.i]} average.`;
+  return t('stats.history.dowInsightCompare', { bestDay: labels[best.i], multiplier, worstDay: labels[worst.i] });
 }
 
 function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
@@ -425,7 +433,9 @@ function ScopeSection({
   leagues: LeaguePlayedSummary[] | null;
   insight: string;
 }) {
+  const { t, i18n } = useTranslation();
   const colors = useThemeColors();
+  const labels = useMemo(() => dayLabels(i18n.language), [i18n.language]);
   const maxBar = Math.max(1, ...chartBars.map((b) => b.value));
   const maxDow = Math.max(1, ...dow);
   const bestDowIdx = dow.indexOf(Math.max(...dow));
@@ -434,13 +444,13 @@ function ScopeSection({
     <View>
       <View style={styles.statRow}>
         <StatCard label={totalLabel} value={compactNumber(total)} accent />
-        <StatCard label="Daily avg" value={dailyAvg.toLocaleString()} />
-        <StatCard label="Win rate" value={winRate === null ? '—' : `${winRate}%`} />
+        <StatCard label={t('stats.history.dailyAvg')} value={dailyAvg.toLocaleString()} />
+        <StatCard label={t('stats.history.winRate')} value={winRate === null ? '-' : `${winRate}%`} />
       </View>
 
       {predictions.length > 0 && (
         <>
-          <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>Predictions</Text>
+          <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>{t('stats.history.predictionsHeading')}</Text>
           <View style={[styles.predictionsCard, { backgroundColor: colors.card }]}>
             {predictions.map((p, i) => (
               <View key={p.label} style={[styles.predictionRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
@@ -455,7 +465,7 @@ function ScopeSection({
             ))}
           </View>
           <Text style={[styles.predictionsFootnote, { color: colors.textDim }]}>
-            Estimates from your own recent pace — not a guarantee, just where today's trend leads.
+            {t('stats.history.predictionsFootnote')}
           </Text>
         </>
       )}
@@ -481,9 +491,9 @@ function ScopeSection({
         </View>
       </View>
 
-      <Text style={[styles.sectionHeading, { color: colors.textMuted, marginTop: theme.space(5) }]}>By day of week</Text>
+      <Text style={[styles.sectionHeading, { color: colors.textMuted, marginTop: theme.space(5) }]}>{t('stats.history.byDayOfWeek')}</Text>
       <View style={{ gap: theme.space(2) }}>
-        {DAY_LABELS.map((label, i) => (
+        {labels.map((label, i) => (
           <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space(2.5) }}>
             <Text style={[styles.dowLabel, { color: i === bestDowIdx ? colors.accent : colors.textMuted }]}>{label}</Text>
             <View style={[styles.dowTrack, { backgroundColor: colors.border }]}>
@@ -499,7 +509,7 @@ function ScopeSection({
         ))}
       </View>
 
-      <Text style={[styles.sectionHeading, { color: colors.textMuted, marginTop: theme.space(5) }]}>Every league you've played</Text>
+      <Text style={[styles.sectionHeading, { color: colors.textMuted, marginTop: theme.space(5) }]}>{t('stats.history.everyLeaguePlayed')}</Text>
       <LeagueListSection leagues={leagues} compact />
 
       <Text style={[styles.insight, { color: colors.textSubtle }]}>{insight}</Text>
@@ -508,12 +518,13 @@ function ScopeSection({
 }
 
 function LeagueListSection({ leagues, compact }: { leagues: LeaguePlayedSummary[] | null; compact?: boolean }) {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   if (leagues === null) return <ActivityIndicator color={colors.textMuted} style={{ marginTop: theme.space(6) }} />;
   if (leagues.length === 0) {
     return (
       <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium, marginTop: theme.space(2) }}>
-        You haven't played any leagues yet.
+        {t('stats.history.noLeaguesPlayed')}
       </Text>
     );
   }
@@ -526,7 +537,10 @@ function LeagueListSection({ leagues, compact }: { leagues: LeaguePlayedSummary[
               {l.name}
             </Text>
             <Text style={{ marginTop: theme.space(1), fontSize: 10, color: colors.textDim, fontFamily: theme.fontFamily.bodyMedium }}>
-              {l.memberCount} member{l.memberCount === 1 ? '' : 's'} · {l.isLive ? 'live' : `${l.days} day${l.days === 1 ? '' : 's'}`}
+              {t('stats.history.membersAndDuration', {
+                count: l.memberCount,
+                duration: l.isLive ? t('stats.history.live') : t('stats.history.daysCount', { count: l.days }),
+              })}
             </Text>
           </View>
           <View
@@ -536,7 +550,7 @@ function LeagueListSection({ leagues, compact }: { leagues: LeaguePlayedSummary[
             ]}
           >
             <Text style={{ fontSize: 9, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 1, textTransform: 'uppercase', color: l.rank === 1 ? colors.primaryText : colors.textSubtle }}>
-              {l.rank ? ordinal(l.rank) : '—'}
+              {l.rank ? ordinal(t, l.rank) : '-'}
             </Text>
           </View>
           <Text style={{ width: 56, textAlign: 'right', fontSize: 17, fontFamily: theme.fontFamily.heading, color: colors.text, fontVariant: ['tabular-nums'] }}>

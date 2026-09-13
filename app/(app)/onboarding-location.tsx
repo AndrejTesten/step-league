@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +16,7 @@ import { theme, useThemeColors } from '@/lib/theme';
 // Country first, then that country's cities, since a city list only makes
 // sense once you know which country's cities to show.
 export default function OnboardingLocation() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { session, refreshProfile } = useSession();
@@ -30,7 +32,7 @@ export default function OnboardingLocation() {
   useEffect(() => {
     fetchCountries()
       .then(setCountries)
-      .catch((e) => setError(getErrorMessage(e, 'Could not load countries.')))
+      .catch((e) => setError(getErrorMessage(e, t('onboarding.location.errors.countries'))))
       .finally(() => setCountriesLoading(false));
   }, []);
 
@@ -43,7 +45,7 @@ export default function OnboardingLocation() {
     setCitiesLoading(true);
     fetchCitiesForCountry(value)
       .then(setCities)
-      .catch((e) => setError(getErrorMessage(e, 'Could not load cities.')))
+      .catch((e) => setError(getErrorMessage(e, t('onboarding.location.errors.cities'))))
       .finally(() => setCitiesLoading(false));
   }
 
@@ -60,7 +62,7 @@ export default function OnboardingLocation() {
       await refreshProfile();
       router.replace('/');
     } catch (e) {
-      setError(getErrorMessage(e, 'Could not save your location.'));
+      setError(getErrorMessage(e, t('onboarding.location.errors.save')));
     } finally {
       setSaving(false);
     }
@@ -69,29 +71,29 @@ export default function OnboardingLocation() {
   return (
     <Screen style={{ paddingTop: theme.space(14), gap: theme.space(4) }}>
       <View>
-        <Title>Where are you?</Title>
+        <Title>{t('onboarding.location.heading')}</Title>
         <Muted style={{ marginTop: theme.space(1) }}>
-          Powers the City and Country leaderboards — you can change this later in your profile.
+          {t('onboarding.location.subheading')}
         </Muted>
       </View>
 
       <SearchableSelect
-        placeholder="Country"
+        placeholder={t('profile.location.country')}
         value={country}
         options={countries}
         onSelect={handleSelectCountry}
         loading={countriesLoading}
-        emptyMessage="No countries found."
+        emptyMessage={t('profile.location.noCountries')}
       />
 
       <SearchableSelect
-        placeholder="City"
+        placeholder={t('profile.location.city')}
         value={city}
         options={cities}
         onSelect={setCity}
         loading={citiesLoading}
         disabled={!country}
-        emptyMessage={country ? 'No cities found.' : 'Pick a country first.'}
+        emptyMessage={country ? t('profile.location.noCities') : t('profile.location.pickCountryFirst')}
       />
 
       {error && <Muted style={{ color: colors.danger }}>{error}</Muted>}
@@ -99,7 +101,7 @@ export default function OnboardingLocation() {
       <View style={{ flex: 1 }} />
 
       <View style={{ paddingBottom: insets.bottom }}>
-        <Button label="Continue" onPress={handleSave} loading={saving} disabled={!country || !city} />
+        <Button label={t('common.continue')} onPress={handleSave} loading={saving} disabled={!country || !city} />
       </View>
     </Screen>
   );

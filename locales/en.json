@@ -1,0 +1,504 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "continue": "Continue",
+    "save": "Save",
+    "done": "Done",
+    "back": "Back",
+    "loading": "Loading…",
+    "tryAgain": "Try again",
+    "close": "Close",
+    "you": "You",
+    "noMatches": "No matches."
+  },
+  "app": {
+    "error": {
+      "title": "Something went wrong",
+      "message": "It's been reported automatically. Try again. If it keeps happening, close and reopen the app."
+    }
+  },
+  "nav": {
+    "newLeague": "New league",
+    "joinLeague": "Join a league",
+    "shareResults": "Share results",
+    "yourStats": "Your stats",
+    "profile": "Profile",
+    "appearance": "Appearance"
+  },
+  "auth": {
+    "signIn": {
+      "tagline": "Scores lock until 22:00. Walk all day, find out at night.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "noAccount": "Don't have an account? Sign up"
+    },
+    "signUp": {
+      "tagline": "Compete with friends, one league at a time.",
+      "displayNameLabel": "Display name",
+      "usernameLabel": "Username",
+      "fillAllFields": "Fill in every field.",
+      "submit": "Sign up",
+      "checkEmailTitle": "Check your email",
+      "checkEmailMessage": "We sent a confirmation link to {{email}}. Tap it, then come back and sign in.",
+      "backToSignIn": "Back to sign in",
+      "noAccountFlip": "Already have an account? Sign in"
+    },
+    "social": {
+      "comingSoon": "{{provider}} sign-in is coming soon. Use email for now.",
+      "divider": "OR",
+      "continueWith": "Continue with {{provider}}"
+    }
+  },
+  "profile": {
+    "language": {
+      "heading": "Language"
+    },
+    "fallbackName": "Profile",
+    "uploading": "Uploading…",
+    "changePhoto": "change photo",
+    "footerNote": "Step League is one person and a server bill. No ads, no selling your steps.",
+    "signOut": "Sign out",
+    "stats": {
+      "dayStreak": "Day streak",
+      "leagues": "Leagues",
+      "wins": "Wins"
+    },
+    "location": {
+      "country": "Country",
+      "city": "City",
+      "noCountries": "No countries found.",
+      "noCities": "No cities found.",
+      "pickCountryFirst": "Pick a country first.",
+      "save": "Save location"
+    },
+    "dailyGoal": {
+      "label": "Daily goal",
+      "save": "Save daily goal"
+    },
+    "scoreUpdate": {
+      "label": "Score update",
+      "local": "local"
+    },
+    "notifications": {
+      "label": "Notifications",
+      "resultsOnly": "Results only"
+    },
+    "premium": {
+      "active": "Premium active",
+      "priceArrow": "€1.99/mo →",
+      "getPremium": "Get premium · €1.99/mo"
+    },
+    "statHistory": {
+      "label": "Stat history",
+      "allTime": "Every league, all time →",
+      "premium": "Premium →"
+    },
+    "appearance": {
+      "heading": "Appearance",
+      "colorThemes": "Color themes →",
+      "auto": "Auto",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "errors": {
+      "photo": "Could not update photo.",
+      "location": "Could not save location.",
+      "goal": "Could not save your daily goal."
+    }
+  },
+  "home": {
+    "bottomNav": {
+      "leagues": "Leagues",
+      "steps": "Steps",
+      "global": "Global"
+    },
+    "yourLeagues": {
+      "title": "Leagues",
+      "createLeague": "Create league",
+      "joinWithCode": "Join with code",
+      "emptyTitle": "No leagues yet",
+      "emptyBody": "Create one and send the invite code to your friends.",
+      "membersEndsOn_one": "{{count}} member · ends {{date}}",
+      "membersEndsOn_other": "{{count}} members · ends {{date}}",
+      "membersFinishedOn_one": "{{count}} member · finished {{date}}",
+      "membersFinishedOn_other": "{{count}} members · finished {{date}}",
+      "youWon": "You won",
+      "sealedLeft": "Sealed · {{time}} left",
+      "ofCount": "Of {{count}}",
+      "footerNote": "Tables always show yesterday. Today's rows unlock at 22:00."
+    },
+    "stepCounter": {
+      "premium": "Premium",
+      "goPremium": "Go Premium",
+      "syncError": "Steps aren't syncing: {{error}}",
+      "todayLabel": "Today · {{date}}",
+      "steps": "Steps",
+      "goalPct": "{{percent}}% of {{goal}}",
+      "goalReached": "Goal reached",
+      "toGo": "{{total}} to go",
+      "distance": "Distance",
+      "km": "km",
+      "kcal": "Kcal",
+      "moving": "Moving",
+      "scoresUnlockIn": "Scores unlock in",
+      "leaguesWaiting_one": "{{count}} league waiting",
+      "leaguesWaiting_other": "{{count}} leagues waiting",
+      "yesterday": "Yesterday",
+      "rankInLeague": "{{rank}} · {{league}}",
+      "rankOrdinal_ordinal_one": "{{count}}st",
+      "rankOrdinal_ordinal_two": "{{count}}nd",
+      "rankOrdinal_ordinal_few": "{{count}}rd",
+      "rankOrdinal_ordinal_other": "{{count}}th"
+    },
+    "leaderboards": {
+      "title": "Global",
+      "world": "World",
+      "theWorld": "the world",
+      "searchPlaceholder": "Search by name",
+      "yourPlaceIn": "Your place in {{scope}}",
+      "ofTotal": "of {{total}}",
+      "topPercent": "top {{percent}}%",
+      "columnWalker": "Walker",
+      "columnSteps": "Steps",
+      "addLocationInProfile": "Add your {{scope}} in Profile to see this leaderboard.",
+      "noStepsYet": "No one has recorded any steps here yet.",
+      "errors": {
+        "loadFailed": "Could not load the leaderboard."
+      }
+    }
+  },
+  "leagues": {
+    "chart": {
+      "notEnoughData": "Not enough days recorded yet to draw a graph.",
+      "youSuffix": " (you)"
+    },
+    "create": {
+      "nameLabel": "League name",
+      "namePlaceholder": "e.g. Office Squad",
+      "endsOnLabel": "Ends on",
+      "scoringLabel": "Scoring",
+      "whoCanJoinLabel": "Who can join",
+      "inviteCodeOnly": "Invite code only",
+      "anyoneCanFindIt": "Anyone can find it",
+      "stakesLabel": "Stakes (optional)",
+      "winnerStakesPlaceholder": "Winner gets… e.g. picks the next restaurant",
+      "loserStakesPlaceholder": "Loser has to… e.g. buys coffee for a week",
+      "submit": "Create league",
+      "presets": {
+        "1week": "1 week",
+        "1month": "1 month",
+        "endOfYear": "End of year"
+      },
+      "scoring": {
+        "dailyWins": {
+          "label": "Daily wins",
+          "hint": "Daily wins: 1 point to whoever tops the 22:00 table."
+        },
+        "totalSteps": {
+          "label": "Total steps",
+          "hint": "Total steps: standings rank by the whole round's total."
+        }
+      },
+      "errors": {
+        "nameRequired": "Give your league a name.",
+        "createFailed": "Could not create the league."
+      }
+    },
+    "join": {
+      "codeLabel": "Enter the six-character code",
+      "codeHint": "Codes come from whoever made the league.",
+      "submit": "Join league",
+      "openLeagues": "Open leagues",
+      "openLeaguesNear": "Open leagues near {{city}}",
+      "noOpenLeagues": "No open leagues to show yet.",
+      "joinChip": "Join",
+      "membersEndsOn_one": "{{count}} member · ends {{date}}",
+      "membersEndsOn_other": "{{count}} members · ends {{date}}",
+      "membersEndsOnShort_one": "{{count}} member · ends {{date}}",
+      "membersEndsOnShort_other": "{{count}} members · ends {{date}}",
+      "errors": {
+        "notFound": "No league found for that code.",
+        "joinFailed": "Could not join that league."
+      }
+    },
+    "detail": {
+      "viewList": "List",
+      "viewGraph": "Graph",
+      "peek": "Peek",
+      "invite": "Invite",
+      "membersCount_one": "{{count}} member",
+      "membersCount_other": "{{count}} members",
+      "finished": "finished",
+      "endsOn": "ends {{date}}",
+      "scoringDailyWins": "daily wins",
+      "scoringTotalSteps": "total steps",
+      "winnerGets": "Winner gets:",
+      "loserHasTo": "Loser has to:",
+      "showingDate": "Showing {{date}}",
+      "liveSteps": "Live steps",
+      "unlocksAt2200": "Today unlocks at 22:00",
+      "loadingGraph": "Loading graph…",
+      "leagueScore": "League score",
+      "finalStandingsWinner": "Final standings · winner",
+      "dailyWinsCount_one": "{{count}} daily win",
+      "dailyWinsCount_other": "{{count}} daily wins",
+      "holdToReact": "Hold a name to react to it",
+      "columnMember": "Member",
+      "columnPoints": "Pts",
+      "noStepsRecorded": "No steps recorded yet. Open the app on your phone with Health access granted.",
+      "rematchNewLeague": "Rematch: new league",
+      "newEndDate": "New end date",
+      "whosPlaying": "Who's playing this round",
+      "alwaysIn": " (always in)",
+      "confirm": "Confirm",
+      "waitingForOwner": "Waiting for the league owner to start a new round.",
+      "shareFinalTable": "Share final table",
+      "rival": "Rival",
+      "stepsAhead_one": "{{steps}} step ahead",
+      "stepsAhead_other": "{{steps}} steps ahead",
+      "stepsBehind_one": "{{steps}} step behind",
+      "stepsBehind_other": "{{steps}} steps behind",
+      "tapToPickRival": "Tap to pick a rival to track head-to-head.",
+      "pastRounds": "Past rounds",
+      "roundDateRange": "Round {{number}} · {{start}} – {{end}}",
+      "standingSteps_one": "{{name}}: {{steps}} step",
+      "standingSteps_other": "{{name}}: {{steps}} steps",
+      "leagueChat": "League chat",
+      "noMessagesYet": "No messages yet. Say hi.",
+      "exitLeague": "Exit league",
+      "saySomething": "Say something…",
+      "send": "Send",
+      "pickRival": "Pick a rival",
+      "reactTo": "React to {{name}}",
+      "exitThisLeague": "Exit this league?",
+      "exitWarning": "You'll lose your spot in {{name}}. You'd need a new invite to rejoin. Your past standings stay in its history either way.",
+      "thisLeague": "this league",
+      "stay": "Stay",
+      "inviteMessage": "Join my step league \"{{name}}\" on StepLeague! Use code {{code}}. Ends {{date}}.",
+      "errors": {
+        "loadFailed": "Could not load this league.",
+        "restartFailed": "Could not start a new round.",
+        "exitFailed": "Could not leave this league."
+      }
+    },
+    "peek": {
+      "peeking": "Peeking…",
+      "leagueFallback": "League",
+      "livePeekAt": "Live peek · {{time}}",
+      "leftToday_one": "{{count}} left today",
+      "leftToday_other": "{{count}} left today",
+      "inFirst": "You're in 1st",
+      "gapToFirst": "Gap to 1st",
+      "closesIn": "Closes in {{seconds}}s",
+      "behind": "behind",
+      "columnNow": "Now",
+      "columnPace": "Pace",
+      "footnote": "Pace projects tonight's finish at today's current rate. Peeks are silent. Nobody sees that you looked.",
+      "peeksLeftOf": "{{remaining}} of {{limit}} peeks left",
+      "backToLeague": "Back to league · {{seconds}}s",
+      "premium": "Premium",
+      "deniedHeading": "That was\ntoday's peek",
+      "deniedBody": "Free gives you one look per day. Premium gives you three, enough to check at lunch, after work, and right before the table locks.",
+      "getPremium": "Get premium · €1.99/mo",
+      "waitFor2200": "Wait for 22:00"
+    },
+    "results": {
+      "scoresAreIn": "Scores are in",
+      "todaysWinner": "Today's winner",
+      "deltaUp": "↑ {{count}}",
+      "deltaDown": "↓ {{count}}",
+      "walkedToday": "You walked {{steps}} today.",
+      "walkedMovedUp": "You walked {{steps}} today. You moved up to {{rank}}.",
+      "walkedNowRank": "You walked {{steps}} today. You're now {{rank}}.",
+      "openLeague": "Open league",
+      "sayInChat": "Say something in chat"
+    },
+    "share": {
+      "top3": "Top 3",
+      "top5": "Top 5",
+      "justMe": "Just me",
+      "captionPlaceholder": "Add a caption (optional), e.g. Best month ever",
+      "customize": "Customize",
+      "shareImage": "Share image",
+      "copyLink": "Copy link",
+      "saveToPhotos": "Save to photos",
+      "working": "Working…",
+      "share": "Share",
+      "appName": "Step League",
+      "cardEyebrow": "{{name}} · final",
+      "winner": "Winner",
+      "winsLabel": "Wins: {{stakes}}",
+      "yourResult": "Your result",
+      "placeLabel": "{{place}} place",
+      "lastPlaceLabel": "Last place: {{stakes}}",
+      "cardFooter": "{{date}} · {{memberCount}} members · {{steps}} steps walked",
+      "dialogTitle": "{{name}} results",
+      "linkCopied": "Link copied.",
+      "savedToPhotos": "Saved to photos.",
+      "placeSteps": "{{place}} place, {{steps}} steps",
+      "winnerGetsLine": "\nWinner gets: {{stakes}}",
+      "fallbackText": "{{name}} · final standings\n{{lines}}{{stakes}}{{captionLine}}\nShared via Step League",
+      "errors": {
+        "shareFailed": "Could not share the results.",
+        "notAvailableOnWeb": "Saving photos isn't available in the browser.",
+        "photoAccessNeeded": "Photo library access is needed to save the results card.",
+        "saveFailed": "Could not save the image."
+      }
+    }
+  },
+  "onboarding": {
+    "location": {
+      "heading": "Where are you?",
+      "subheading": "Powers the City and Country leaderboards. You can change this later in your profile.",
+      "errors": {
+        "countries": "Could not load countries.",
+        "cities": "Could not load cities.",
+        "save": "Could not save your location."
+      }
+    },
+    "health": {
+      "heading": "Step League needs your step count",
+      "subheading": "Your phone already counts your steps. We read that number once a day so your leagues have something to compare. Nothing else.",
+      "readRows": {
+        "whatWeRead": {
+          "title": "What we read",
+          "body": "Daily step totals only: one number per day, at 22:00."
+        },
+        "whoSeesIt": {
+          "title": "Who sees it",
+          "body": "Only the leagues you join, and only after 22:00."
+        },
+        "whatWeNeverTouch": {
+          "title": "What we never touch",
+          "body": "Location, routes, heart rate, workouts, or anything else in Health. No ads, no third parties, no data sold."
+        }
+      },
+      "agreeLabel": "I agree to Step League reading my daily step count.",
+      "privacyNoteLink": "Privacy note · ~210 words, plain language.",
+      "notifyOptIn": "Also send me one notification at 22:00 when scores land. Optional, asked separately later.",
+      "footnote": "Your phone will ask next. You can say no there, or change it any time in Profile.",
+      "privacyNoteTitle": "Privacy note",
+      "privacyNoteBody": "Step League reads one number from your phone's health data: your total step count for each day. That's it: not your location, your routes, your heart rate, your workouts, or anything else Health/Health Connect tracks.\n\nThat daily total is written to our database (Supabase) tied to your account, so it can be compared against the other members of leagues you choose to join. Standings only ever show yesterday's total and earlier. Today's count stays private to you until the 22:00 rollup, every day, without exception.\n\nWe don't run ads, and we don't have an analytics or advertising SDK that reads this data. We don't sell it, license it, or share it with any third party. It isn't used to train any model. The only people who can ever see your step totals are the other members of leagues you've personally joined, and only for days that have already locked in.\n\nIf you leave a league, your past totals stay visible in that league's history the same way everyone else's do. Leaving doesn't retroactively hide already-locked standings. You can revoke step access at any time from your phone's Health/Health Connect settings, or stop syncing from Step League's own Profile screen. Deleting your account deletes your step history along with it.\n\nOne developer runs this app and reads this note the same way you're reading it now: plainly, and meaning every word."
+    }
+  },
+  "premium": {
+    "headerLabel": "Step League Premium",
+    "perMonth": "/ month",
+    "pitch": "One developer, one server bill, no ads and no data sold. Two euros keeps the counter running and gets you the three things people ask for most.",
+    "notLiveYet": "Premium isn't live yet",
+    "finishingSetup": "We're finishing payment setup. Check back soon.",
+    "priceShort": "€1.99/mo",
+    "features": {
+      "peeks": {
+        "title": "3 peeks a day, not 1",
+        "body": "See live scores whenever you want. Check at lunch, after work, and before the table locks."
+      },
+      "history": {
+        "title": "Your whole history",
+        "body": "Every league, every year, day-of-week patterns and win rates you'd never have known."
+      },
+      "themes": {
+        "title": "5 extra themes",
+        "body": "Cyan, Ember, Violet, Mono, and one more, plus every new one after."
+      }
+    },
+    "manage": {
+      "youArePremium": "You're premium",
+      "subtitle": "€1.99/month · all three premium features unlocked.",
+      "howToCancel": {
+        "title": "How to cancel",
+        "body": "Subscriptions are managed by the App Store or Google Play, not inside Step League."
+      },
+      "onIphone": {
+        "title": "On iPhone",
+        "body": "Settings → your name → Subscriptions → Step League → Cancel Subscription."
+      },
+      "onAndroid": {
+        "title": "On Android",
+        "body": "Google Play Store → profile icon → Payments & subscriptions → Subscriptions → Step League → Cancel."
+      },
+      "keepUntilBillingEnds": "You keep premium until the current billing period ends."
+    }
+  },
+  "themePicker": {
+    "previewing": "Previewing {{theme}} · reverts in {{seconds}}s",
+    "getPremium": "Get premium",
+    "included": "Included",
+    "dark": "Dark",
+    "light": "Light",
+    "switchHint": "You can also switch this from Profile → Appearance.",
+    "premiumThemes": "Premium themes",
+    "moreComing": "More\ncoming",
+    "newThemeCadence": "New theme every few releases",
+    "previewFootnote": "Tapping a locked theme previews it live for ten seconds before asking.",
+    "unlockThemes": "Unlock 5 themes · €1.99/mo",
+    "onSuffix": " · on",
+    "lockedSuffix": " 🔒"
+  },
+  "stats": {
+    "today": "Today",
+    "stepsOn": "Steps · {{date}}",
+    "hourlyUnavailable": "Hourly data isn't available on this device.",
+    "stepsThisMonth": "Steps this month",
+    "stepsThisYear": "Steps this year",
+    "monthDaysLogged_one": "{{month}} · {{count}} day",
+    "monthDaysLogged_other": "{{month}} · {{count}} days",
+    "bestDay": "Best day",
+    "averagePerDay": "Average / day",
+    "daysOverGoal": "Days over goal",
+    "yearToDate": "Year to date",
+    "bestMonth": "Best month",
+    "averagePerMonth": "Average / month",
+    "periods": {
+      "day": "Day",
+      "month": "Month",
+      "year": "Year"
+    },
+    "history": {
+      "title": "Stat history",
+      "trackingSince_one": "{{date}} – today · {{count}} day",
+      "trackingSince_other": "{{date}} – today · {{count}} days",
+      "noStepsYet": "No steps recorded yet",
+      "tabs": {
+        "leagues": "Leagues",
+        "year": "Year",
+        "allTime": "All-time"
+      },
+      "totalYear": "Total {{year}}",
+      "totalAllTime": "Total all-time",
+      "dailyAvg": "Daily avg",
+      "winRate": "Win rate",
+      "predictionsHeading": "Predictions",
+      "predictionsFootnote": "Estimates from your own recent pace: not a guarantee, just where today's trend leads.",
+      "monthlyAverage": "Monthly average",
+      "yearlyAverage": "Yearly average",
+      "byDayOfWeek": "By day of week",
+      "everyLeaguePlayed": "Every league you've played",
+      "noLeaguesPlayed": "You haven't played any leagues yet.",
+      "membersAndDuration_one": "{{count}} member · {{duration}}",
+      "membersAndDuration_other": "{{count}} members · {{duration}}",
+      "live": "live",
+      "daysCount_one": "{{count}} day",
+      "daysCount_other": "{{count}} days",
+      "axisBest": "{{label}} · best",
+      "dowInsightEmpty": "Log a few more days to see your day-of-week pattern.",
+      "dowInsightSingle": "You average {{count}} steps on {{day}}s.",
+      "dowInsightCompare": "{{bestDay}}s are your strongest day: about {{multiplier}}x your {{worstDay}} average.",
+      "insightWithStreak": "{{insight}} Your longest streak is {{count}} days.",
+      "predictions": {
+        "yearEndPace": "Year-end pace",
+        "yearEndPaceCaption": "At your average since Jan 1, projected to Dec 31.",
+        "trend": "Trend",
+        "trendCaption14": "Last 14 days vs. the 14 before that.",
+        "trendCaption30": "Last 30 days vs. the 30 before that.",
+        "consistency": "Consistency",
+        "consistencyCaptionYear": "Share of days this year with steps logged.",
+        "consistencyCaptionAllTime": "Share of all tracked days with steps logged.",
+        "nextMilestone": "Next milestone: {{milestone}}",
+        "nextMilestoneCaption": "Around {{date}}, at your last 90 days' pace.",
+        "daysApprox": "~{{count}}d"
+      }
+    }
+  }
+}

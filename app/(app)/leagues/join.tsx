@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,6 +14,7 @@ import type { PublicLeaguePreview } from '@/lib/types';
 const INVITE_CODE_LENGTH = 6;
 
 export default function JoinLeague() {
+  const { t, i18n } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { profile } = useSession();
@@ -51,7 +53,7 @@ export default function JoinLeague() {
         if (!cancelled) setPreview(result);
       })
       .catch(() => {
-        if (!cancelled) setError('No league found for that code.');
+        if (!cancelled) setError(t('leagues.join.errors.notFound'));
       })
       .finally(() => {
         if (!cancelled) setLooking(false);
@@ -68,7 +70,7 @@ export default function JoinLeague() {
       const leagueId = await joinLeague(code);
       router.replace(`/leagues/${leagueId}`);
     } catch (e) {
-      setError(getErrorMessage(e, 'Could not join that league.'));
+      setError(getErrorMessage(e, t('leagues.join.errors.joinFailed')));
     } finally {
       setLoading(false);
     }
@@ -80,7 +82,7 @@ export default function JoinLeague() {
       await joinPublicLeague(league.id);
       router.replace(`/leagues/${league.id}`);
     } catch (e) {
-      setError(getErrorMessage(e, 'Could not join that league.'));
+      setError(getErrorMessage(e, t('leagues.join.errors.joinFailed')));
       setJoiningId(null);
     }
   }
@@ -99,7 +101,7 @@ export default function JoinLeague() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ gap: theme.space(2.5) }}>
-          <SectionLabel>Enter the six-character code</SectionLabel>
+          <SectionLabel>{t('leagues.join.codeLabel')}</SectionLabel>
           <Pressable onPress={() => inputRef.current?.focus()} style={styles.codeRow}>
             {boxes.map((char, i) => (
               <View
@@ -123,7 +125,7 @@ export default function JoinLeague() {
             style={styles.hiddenInput}
           />
           <Text style={{ fontSize: 11, lineHeight: 16, fontFamily: theme.fontFamily.bodyMedium, color: colors.textDim }}>
-            Codes come from whoever made the league.
+            {t('leagues.join.codeHint')}
           </Text>
         </View>
 
@@ -135,8 +137,10 @@ export default function JoinLeague() {
               {preview.name}
             </Text>
             <Text style={{ marginTop: theme.space(1), fontSize: 12, fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>
-              {preview.member_count} member{preview.member_count === 1 ? '' : 's'} · ends{' '}
-              {new Date(preview.deadline).toLocaleDateString()}
+              {t('leagues.join.membersEndsOn', {
+                count: preview.member_count,
+                date: new Date(preview.deadline).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+              })}
             </Text>
           </View>
         )}
@@ -147,15 +151,17 @@ export default function JoinLeague() {
           </Text>
         )}
 
-        <Button label="Join league" onPress={handleJoin} loading={loading} disabled={!preview} arrow />
+        <Button label={t('leagues.join.submit')} onPress={handleJoin} loading={loading} disabled={!preview} arrow />
 
         <View style={{ gap: theme.space(2.5) }}>
-          <SectionLabel>Open leagues{profile?.city ? ` near ${profile.city}` : ''}</SectionLabel>
+          <SectionLabel>
+            {profile?.city ? t('leagues.join.openLeaguesNear', { city: profile.city }) : t('leagues.join.openLeagues')}
+          </SectionLabel>
           {openLoading ? (
             <ActivityIndicator color={colors.textMuted} />
           ) : openLeagues.length === 0 ? (
             <Text style={{ fontSize: 12, fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>
-              No open leagues to show yet.
+              {t('leagues.join.noOpenLeagues')}
             </Text>
           ) : (
             openLeagues.map((league) => (
@@ -165,8 +171,10 @@ export default function JoinLeague() {
                     {league.name}
                   </Text>
                   <Text style={{ marginTop: theme.space(1.25), fontSize: 11, fontFamily: theme.fontFamily.bodyMedium, color: colors.textMuted }}>
-                    {league.member_count} members · ends{' '}
-                    {new Date(league.deadline).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    {t('leagues.join.membersEndsOnShort', {
+                      count: league.member_count,
+                      date: new Date(league.deadline).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+                    })}
                   </Text>
                 </View>
                 <Pressable
@@ -183,7 +191,7 @@ export default function JoinLeague() {
                       <ActivityIndicator size="small" color={colors.accent} />
                     ) : (
                       <Text style={{ fontSize: 10, fontFamily: theme.fontFamily.bodySemiBold, letterSpacing: 0.8, textTransform: 'uppercase', color: pressed ? colors.primaryText : colors.accent }}>
-                        Join
+                        {t('leagues.join.joinChip')}
                       </Text>
                     )
                   }

@@ -11,7 +11,6 @@ export type Profile = {
   avatar_url: string | null;
   city: string | null;
   country: string | null;
-  roast_mode: boolean;
   daily_goal: number;
   color_theme: ColorTheme;
   created_at: string;

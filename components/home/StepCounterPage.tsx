@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar, Screen, SectionLabel } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
 import { DEFAULT_DAILY_GOAL, KCAL_PER_STEP, METERS_PER_STEP, STEPS_PER_MINUTE } from '@/lib/equivalences';
 import { getLeaderboard, listMyLeagues } from '@/lib/leagues';
-import { getDailyStepsMap, getStepStats } from '@/lib/stats';
+import { getStepStatsAndMap } from '@/lib/stats';
 import { dateKeyInTimezone } from '@/lib/steps-shared';
 import { useSyncStatus } from '@/lib/sync-status';
 import { useCountdownClock } from '@/lib/use-countdown-clock';
@@ -28,6 +29,7 @@ function formatMinutes(totalMinutes: number): string {
 }
 
 export function StepCounterPage({ width }: { width: number }) {
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
   const { session, profile } = useSession();
@@ -65,9 +67,8 @@ export function StepCounterPage({ width }: { width: number }) {
     if (!userId || !timezone) return;
     const requestId = ++latestRequestId.current;
     try {
-      const [stats, dailyMap, myLeagues] = await Promise.all([
-        getStepStats(userId, timezone),
-        getDailyStepsMap(userId),
+      const [{ stats, map: dailyMap }, myLeagues] = await Promise.all([
+        getStepStatsAndMap(userId, timezone),
         listMyLeagues().catch(() => []),
       ]);
       if (!mountedRef.current || requestId !== latestRequestId.current) return;
@@ -135,7 +136,7 @@ export function StepCounterPage({ width }: { width: number }) {
 
   const yesterday = last7.length ? last7[last7.length - 2] : undefined;
   const todayLabel = timezone
-    ? new Intl.DateTimeFormat(undefined, { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' }).format(
+    ? new Intl.DateTimeFormat(i18n.language, { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' }).format(
         new Date()
       )
     : '';
@@ -157,7 +158,7 @@ export function StepCounterPage({ width }: { width: number }) {
             hitSlop={12}
             style={[styles.coffeeButton, { borderColor: colors.accent }]}
           >
-            <Text style={[styles.coffeeLabel, { color: colors.accent }]}>Premium</Text>
+            <Text style={[styles.coffeeLabel, { color: colors.accent }]}>{t('home.stepCounter.premium')}</Text>
           </Pressable>
         ) : (
           <Pressable
@@ -165,7 +166,7 @@ export function StepCounterPage({ width }: { width: number }) {
             hitSlop={12}
             style={[styles.coffeeButton, { borderColor: colors.controlBorder }]}
           >
-            <Text style={[styles.coffeeLabel, { color: colors.textSubtle }]}>Go Premium</Text>
+            <Text style={[styles.coffeeLabel, { color: colors.textSubtle }]}>{t('home.stepCounter.goPremium')}</Text>
           </Pressable>
         )}
         <Pressable onPress={() => router.push('/profile')} hitSlop={12}>
@@ -175,15 +176,15 @@ export function StepCounterPage({ width }: { width: number }) {
 
       {syncStatus.error && (
         <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small, marginBottom: theme.space(2) }}>
-          Steps aren't syncing: {syncStatus.error}
+          {t('home.stepCounter.syncError', { error: syncStatus.error })}
         </Text>
       )}
 
       <Pressable onPress={() => router.push('/stats')}>
-        <SectionLabel>Today · {todayLabel}</SectionLabel>
+        <SectionLabel>{t('home.stepCounter.todayLabel', { date: todayLabel })}</SectionLabel>
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: theme.space(2.5), marginTop: theme.space(1.5) }}>
-          <Text style={[styles.hero, { color: colors.accent }]}>{loading ? '—' : displayedToday.toLocaleString()}</Text>
-          <Text style={[styles.stepsWord, { color: colors.textMuted }]}>Steps</Text>
+          <Text style={[styles.hero, { color: colors.accent }]}>{loading ? '-' : displayedToday.toLocaleString()}</Text>
+          <Text style={[styles.stepsWord, { color: colors.textMuted }]}>{t('home.stepCounter.steps')}</Text>
         </View>
       </Pressable>
 
@@ -192,8 +193,8 @@ export function StepCounterPage({ width }: { width: number }) {
           <View style={[styles.goalFill, { width: `${goalPct}%`, backgroundColor: colors.accent }]} />
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={[styles.goalCaption, { color: colors.textMuted }]}>{goalPct}% of {dailyGoal.toLocaleString()}</Text>
-          <Text style={[styles.goalCaption, { color: colors.textMuted }]}>{toGo === 0 ? 'Goal reached' : `${toGo.toLocaleString()} to go`}</Text>
+          <Text style={[styles.goalCaption, { color: colors.textMuted }]}>{t('home.stepCounter.goalPct', { percent: goalPct, goal: dailyGoal.toLocaleString() })}</Text>
+          <Text style={[styles.goalCaption, { color: colors.textMuted }]}>{toGo === 0 ? t('home.stepCounter.goalReached') : t('home.stepCounter.toGo', { total: toGo.toLocaleString() })}</Text>
         </View>
       </View>
 
@@ -215,7 +216,7 @@ export function StepCounterPage({ width }: { width: number }) {
         <View style={styles.chartAxis}>
           {last7.map((d) => (
             <Text key={d.dateKey} style={[styles.axisLabel, { color: colors.textDim }]}>
-              {new Intl.DateTimeFormat(undefined, { weekday: 'narrow' }).format(new Date(`${d.dateKey}T00:00:00`))}
+              {new Intl.DateTimeFormat(i18n.language, { weekday: 'narrow' }).format(new Date(`${d.dateKey}T00:00:00`))}
             </Text>
           ))}
         </View>
@@ -223,27 +224,27 @@ export function StepCounterPage({ width }: { width: number }) {
 
       <View style={styles.statsRow}>
         <View style={[styles.statCell, { backgroundColor: colors.card }]}>
-          <SectionLabel>Distance</SectionLabel>
+          <SectionLabel>{t('home.stepCounter.distance')}</SectionLabel>
           <Text style={[styles.statValue, { color: colors.text }]}>
             {km.toFixed(1)}
-            <Text style={styles.statUnit}> km</Text>
+            <Text style={styles.statUnit}> {t('home.stepCounter.km')}</Text>
           </Text>
         </View>
         <View style={[styles.statCell, { backgroundColor: colors.card }]}>
-          <SectionLabel>Kcal</SectionLabel>
+          <SectionLabel>{t('home.stepCounter.kcal')}</SectionLabel>
           <Text style={[styles.statValue, { color: colors.text }]}>{kcal}</Text>
         </View>
         <View style={[styles.statCell, { backgroundColor: colors.card }]}>
-          <SectionLabel>Moving</SectionLabel>
+          <SectionLabel>{t('home.stepCounter.moving')}</SectionLabel>
           <Text style={[styles.statValue, { color: colors.text }]}>{formatMinutes(movingMinutes)}</Text>
         </View>
       </View>
 
       <View style={[styles.countdownCard, { borderColor: colors.controlBorder }]}>
         <View>
-          <SectionLabel>Scores unlock in</SectionLabel>
+          <SectionLabel>{t('home.stepCounter.scoresUnlockIn')}</SectionLabel>
           <Text style={[styles.countdownCaption, { color: colors.textSubtle }]}>
-            {leagueCount} league{leagueCount === 1 ? '' : 's'} waiting
+            {t('home.stepCounter.leaguesWaiting', { count: leagueCount })}
           </Text>
         </View>
         <Text style={[styles.countdownClock, { color: colors.accent }]}>{clock}</Text>
@@ -251,12 +252,15 @@ export function StepCounterPage({ width }: { width: number }) {
 
       {yesterday && (
         <View style={{ marginTop: theme.space(4) }}>
-          <SectionLabel>Yesterday</SectionLabel>
+          <SectionLabel>{t('home.stepCounter.yesterday')}</SectionLabel>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: theme.space(2) }}>
             <Text style={[styles.yesterdayValue, { color: colors.text }]}>{yesterday.steps.toLocaleString()}</Text>
             {rankInfo && (
               <Text style={[styles.rankText, { color: colors.accent }]}>
-                {ordinal(rankInfo.rank)} · {rankInfo.leagueName}
+                {t('home.stepCounter.rankInLeague', {
+                  rank: t('home.stepCounter.rankOrdinal', { count: rankInfo.rank, ordinal: true }),
+                  league: rankInfo.leagueName,
+                })}
               </Text>
             )}
           </View>
@@ -264,12 +268,6 @@ export function StepCounterPage({ width }: { width: number }) {
       )}
     </Screen>
   );
-}
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
 const styles = StyleSheet.create({

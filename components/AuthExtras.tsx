@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { theme, useThemeColors } from '@/lib/theme';
@@ -46,23 +47,24 @@ export function AuthLogo({ tagline }: { tagline: string }) {
  * placeholders until that's set up.
  */
 export function SocialButtons() {
+  const { t } = useTranslation();
   const colors = useThemeColors();
   const { showToast } = useToast();
   function comingSoon(provider: string) {
-    showToast(`${provider} sign-in is coming soon — use email for now.`);
+    showToast(t('auth.social.comingSoon', { provider }));
   }
   return (
     <View style={{ gap: theme.space(2.5) }}>
       <View style={styles.dividerRow}>
         <View style={[styles.dividerLine, { backgroundColor: colors.borderStrong }]} />
-        <Text style={[styles.dividerText, { color: colors.textDim }]}>OR</Text>
+        <Text style={[styles.dividerText, { color: colors.textDim }]}>{t('auth.social.divider')}</Text>
         <View style={[styles.dividerLine, { backgroundColor: colors.borderStrong }]} />
       </View>
       <Pressable onPress={() => comingSoon('Apple')} style={[styles.socialButton, { borderColor: colors.controlBorder }]}>
-        <Text style={[styles.socialButtonText, { color: colors.text }]}>Continue with Apple</Text>
+        <Text style={[styles.socialButtonText, { color: colors.text }]}>{t('auth.social.continueWith', { provider: 'Apple' })}</Text>
       </Pressable>
       <Pressable onPress={() => comingSoon('Google')} style={[styles.socialButton, { borderColor: colors.controlBorder }]}>
-        <Text style={[styles.socialButtonText, { color: colors.text }]}>Continue with Google</Text>
+        <Text style={[styles.socialButtonText, { color: colors.text }]}>{t('auth.social.continueWith', { provider: 'Google' })}</Text>
       </Pressable>
     </View>
   );

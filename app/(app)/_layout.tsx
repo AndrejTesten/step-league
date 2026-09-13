@@ -1,4 +1,5 @@
 import { Redirect, Stack, useSegments } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 import { useSession } from '@/lib/auth-context';
 import { useStepsConsent } from '@/lib/steps-consent';
@@ -9,6 +10,7 @@ import { useStepSync } from '@/lib/use-step-sync';
 // plus modals for create/join/profile — simpler than a tab bar for an app
 // this small, and it's easy to add tabs later if the app grows.
 export default function AppLayout() {
+  const { t } = useTranslation();
   const { profile } = useSession();
   const { consentGiven } = useStepsConsent();
   useStepSync(consentGiven === true);
@@ -67,11 +69,11 @@ export default function AppLayout() {
       <Stack.Screen name="leagues/[id]" options={{ headerShown: true, title: '' }} />
       <Stack.Screen
         name="leagues/create"
-        options={{ presentation: 'modal', headerShown: true, title: 'New league' }}
+        options={{ presentation: 'modal', headerShown: true, title: t('nav.newLeague') }}
       />
       <Stack.Screen
         name="leagues/join"
-        options={{ presentation: 'modal', headerShown: true, title: 'Join a league' }}
+        options={{ presentation: 'modal', headerShown: true, title: t('nav.joinLeague') }}
       />
       <Stack.Screen
         name="leagues/results"
@@ -79,17 +81,17 @@ export default function AppLayout() {
       />
       <Stack.Screen
         name="leagues/share"
-        options={{ presentation: 'modal', headerShown: true, title: 'Share results' }}
+        options={{ presentation: 'modal', headerShown: true, title: t('nav.shareResults') }}
       />
-      <Stack.Screen name="stats" options={{ headerShown: true, title: 'Your stats' }} />
+      <Stack.Screen name="stats" options={{ headerShown: true, title: t('nav.yourStats') }} />
       <Stack.Screen name="stats-history" options={{ headerShown: false }} />
       <Stack.Screen
         name="profile"
-        options={{ presentation: 'modal', headerShown: true, title: 'Profile' }}
+        options={{ presentation: 'modal', headerShown: true, title: t('nav.profile') }}
       />
       <Stack.Screen
         name="theme-picker"
-        options={{ presentation: 'modal', headerShown: true, title: 'Appearance' }}
+        options={{ presentation: 'modal', headerShown: true, title: t('nav.appearance') }}
       />
       <Stack.Screen
         name="premium"

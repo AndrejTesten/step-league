@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -6,18 +7,12 @@ import { Screen, SectionLabel, Tabs } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
 import { DEFAULT_DAILY_GOAL } from '@/lib/equivalences';
 import { getHourlySteps } from '@/lib/steps'; // Metro resolves steps.ios.ts / steps.android.ts / steps.web.ts
-import { getDailyStepsMap, getStepStats } from '@/lib/stats';
+import { getStepStatsAndMap } from '@/lib/stats';
 import { dateKeyInTimezone } from '@/lib/steps-shared';
 import { theme, useThemeColors } from '@/lib/theme';
 import type { StepStats } from '@/lib/types';
 
 type Period = 'day' | 'month' | 'year';
-
-const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
-];
 
 const EMPTY_STATS: StepStats = { today: 0, month: 0, year: 0, allTime: 0, bestDay: 0, daysLogged: 0, streak: 0 };
 
@@ -34,6 +29,12 @@ function addDaysToKey(dateKey: string, delta: number): string {
  * active tab; drilling out (tap the Day/Month header) does the reverse.
  */
 export default function Stats() {
+  const { t } = useTranslation();
+  const PERIOD_OPTIONS: { value: Period; label: string }[] = [
+    { value: 'day', label: t('stats.periods.day') },
+    { value: 'month', label: t('stats.periods.month') },
+    { value: 'year', label: t('stats.periods.year') },
+  ];
   const insets = useSafeAreaInsets();
   const { session, profile } = useSession();
   const [period, setPeriod] = useState<Period>('month');
@@ -46,8 +47,8 @@ export default function Stats() {
 
   useEffect(() => {
     if (!session || !profile) return;
-    Promise.all([getStepStats(session.user.id, profile.timezone), getDailyStepsMap(session.user.id)])
-      .then(([s, map]) => {
+    getStepStatsAndMap(session.user.id, profile.timezone)
+      .then(({ stats: s, map }) => {
         setStats(s);
         setDailyMap(map);
       })
@@ -79,7 +80,7 @@ export default function Stats() {
         </View>
 
         {loading ? (
-          <Text style={{ color: '#a8ada0', fontFamily: theme.fontFamily.bodyMedium }}>Loading…</Text>
+          <Text style={{ color: '#a8ada0', fontFamily: theme.fontFamily.bodyMedium }}>{t('common.loading')}</Text>
         ) : period === 'month' ? (
           <MonthView
             year={cursorYear}
@@ -120,6 +121,7 @@ function DayView({
   onNavigate: (dateKey: string) => void;
   onDrillUp: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const colors = useThemeColors();
   const [hours, setHours] = useState<number[] | null | undefined>(undefined); // undefined = loading
   const isToday = dateKey === today;
@@ -139,7 +141,7 @@ function DayView({
   const total = hours ? hours.reduce((a, b) => a + b, 0) : 0;
   const nowHour = new Date().getHours();
   const maxHour = Math.max(1, ...(hours ?? []));
-  const dayLabel = new Date(`${dateKey}T00:00:00`).toLocaleDateString(undefined, {
+  const dayLabel = new Date(`${dateKey}T00:00:00`).toLocaleDateString(i18n.language, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -148,14 +150,14 @@ function DayView({
   return (
     <View>
       <Pressable onPress={onDrillUp} hitSlop={6}>
-        <SectionLabel>{isToday ? 'Today' : dayLabel}</SectionLabel>
+        <SectionLabel>{isToday ? t('stats.today') : dayLabel}</SectionLabel>
       </Pressable>
       <View style={styles.dayNavRow}>
         <Pressable onPress={() => onNavigate(addDaysToKey(dateKey, -1))} hitSlop={10} style={styles.dayNavArrow}>
           <Text style={[styles.dayNavArrowText, { color: colors.text }]}>‹</Text>
         </Pressable>
         <Text style={[styles.hero, { color: colors.accent, flex: 1, textAlign: 'center' }]}>
-          {hours === undefined ? '—' : total.toLocaleString()}
+          {hours === undefined ? '-' : total.toLocaleString()}
         </Text>
         <Pressable
           onPress={() => !isToday && onNavigate(addDaysToKey(dateKey, 1))}
@@ -166,12 +168,12 @@ function DayView({
           <Text style={[styles.dayNavArrowText, { color: isToday ? colors.border : colors.text }]}>›</Text>
         </Pressable>
       </View>
-      <Text style={[styles.heroCaption, { color: colors.textMuted, textAlign: 'center' }]}>Steps · {dayLabel}</Text>
+      <Text style={[styles.heroCaption, { color: colors.textMuted, textAlign: 'center' }]}>{t('stats.stepsOn', { date: dayLabel })}</Text>
 
       <View style={{ marginTop: theme.space(5) }}>
         {hours === null ? (
           <Text style={{ color: colors.textSubtle, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small, textAlign: 'center', paddingVertical: theme.space(6) }}>
-            Hourly data isn't available on this device.
+            {t('stats.hourlyUnavailable')}
           </Text>
         ) : (
           <View style={{ gap: theme.space(1.5) }}>
@@ -224,6 +226,7 @@ function MonthView({
   onSelectDay: (dateKey: string) => void;
   onDrillUp: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const colors = useThemeColors();
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -242,17 +245,18 @@ function MonthView({
   const average = logged.length ? Math.round(total / logged.length) : 0;
   const overGoal = logged.filter((d) => d.steps >= dailyGoal).length;
   const maxSteps = Math.max(1, ...days.map((d) => d.steps));
-  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString(i18n.language, { month: 'long', year: 'numeric' });
+  const monthShortLabel = new Date(year, month - 1, 1).toLocaleDateString(i18n.language, { month: 'short' });
 
   return (
     <View>
       <Pressable onPress={onDrillUp} hitSlop={6}>
         <SectionLabel>
-          {monthLabel} · {logged.length} day{logged.length === 1 ? '' : 's'}
+          {t('stats.monthDaysLogged', { month: monthLabel, count: logged.length })}
         </SectionLabel>
       </Pressable>
       <Text style={[styles.hero, { color: colors.accent, marginTop: theme.space(1.5) }]}>{total.toLocaleString()}</Text>
-      <Text style={[styles.heroCaption, { color: colors.textMuted }]}>Steps this month</Text>
+      <Text style={[styles.heroCaption, { color: colors.textMuted }]}>{t('stats.stepsThisMonth')}</Text>
 
       <View style={{ marginTop: theme.space(5), gap: theme.space(1.5) }}>
         <View style={styles.chartRow}>
@@ -281,10 +285,10 @@ function MonthView({
       </View>
 
       <View style={styles.statGrid}>
-        <StatCard label="Best day" value={best ? `${best.steps.toLocaleString()} · ${best.day} ${monthLabel.split(' ')[0].slice(0, 3)}` : '—'} />
-        <StatCard label="Average / day" value={average.toLocaleString()} />
-        <StatCard label="Days over goal" value={`${overGoal} / ${logged.length}`} />
-        <StatCard label="Year to date" value={yearToDate.toLocaleString()} />
+        <StatCard label={t('stats.bestDay')} value={best ? `${best.steps.toLocaleString()} · ${best.day} ${monthShortLabel}` : '-'} />
+        <StatCard label={t('stats.averagePerDay')} value={average.toLocaleString()} />
+        <StatCard label={t('stats.daysOverGoal')} value={`${overGoal} / ${logged.length}`} />
+        <StatCard label={t('stats.yearToDate')} value={yearToDate.toLocaleString()} />
       </View>
     </View>
   );
@@ -299,6 +303,7 @@ function YearView({
   dailyMap: Map<string, number>;
   onSelectMonth: (year: number, month: number) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const colors = useThemeColors();
   const monthTotals = useMemo(
     () =>
@@ -320,7 +325,7 @@ function YearView({
     <View>
       <SectionLabel>{year}</SectionLabel>
       <Text style={[styles.hero, { color: colors.accent, marginTop: theme.space(1.5) }]}>{total.toLocaleString()}</Text>
-      <Text style={[styles.heroCaption, { color: colors.textMuted }]}>Steps this year</Text>
+      <Text style={[styles.heroCaption, { color: colors.textMuted }]}>{t('stats.stepsThisYear')}</Text>
 
       <View style={{ marginTop: theme.space(5), gap: theme.space(1.5) }}>
         <View style={styles.chartRow}>
@@ -341,7 +346,7 @@ function YearView({
         <View style={styles.chartAxis}>
           {monthTotals.map((m) => (
             <Text key={m.month} style={[styles.axisLabel, { flex: 1, textAlign: 'center', color: colors.textDim }]}>
-              {new Date(year, m.month - 1, 1).toLocaleDateString(undefined, { month: 'narrow' })}
+              {new Date(year, m.month - 1, 1).toLocaleDateString(i18n.language, { month: 'narrow' })}
             </Text>
           ))}
         </View>
@@ -349,10 +354,10 @@ function YearView({
 
       <View style={styles.statGrid}>
         <StatCard
-          label="Best month"
-          value={best ? `${best.total.toLocaleString()} · ${new Date(year, best.month - 1, 1).toLocaleDateString(undefined, { month: 'short' })}` : '—'}
+          label={t('stats.bestMonth')}
+          value={best ? `${best.total.toLocaleString()} · ${new Date(year, best.month - 1, 1).toLocaleDateString(i18n.language, { month: 'short' })}` : '-'}
         />
-        <StatCard label="Average / month" value={average.toLocaleString()} />
+        <StatCard label={t('stats.averagePerMonth')} value={average.toLocaleString()} />
       </View>
     </View>
   );
