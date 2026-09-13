@@ -44,8 +44,13 @@ export default function OnboardingHealth() {
   return (
     <Screen style={{ paddingHorizontal: 0 }}>
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: theme.space(4.5), paddingTop: theme.space(3), paddingBottom: theme.space(4) }}
+        contentContainerStyle={{
+          paddingHorizontal: theme.space(4.5),
+          paddingTop: insets.top + theme.space(3),
+          paddingBottom: theme.space(4),
+        }}
       >
         <AppMark size={44} />
 

@@ -8,6 +8,7 @@ import { Button, Muted, SearchableSelect, Screen, Title } from '@/components/ui'
 import { useSession } from '@/lib/auth-context';
 import { getErrorMessage } from '@/lib/errors';
 import { fetchCitiesForCountry, fetchCountries } from '@/lib/geo';
+import { useStepsConsent } from '@/lib/steps-consent';
 import { supabase } from '@/lib/supabase';
 import { theme, useThemeColors } from '@/lib/theme';
 
@@ -20,6 +21,7 @@ export default function OnboardingLocation() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
   const { session, refreshProfile } = useSession();
+  const { consentGiven } = useStepsConsent();
   const [countries, setCountries] = useState<string[]>([]);
   const [countriesLoading, setCountriesLoading] = useState(true);
   const [country, setCountry] = useState('');
@@ -60,7 +62,13 @@ export default function OnboardingLocation() {
         .eq('id', session.user.id);
       if (updateError) throw updateError;
       await refreshProfile();
-      router.replace('/');
+      // Go straight to wherever onboarding actually continues instead of
+      // replacing to '/' and relying on the (app) layout's own redirect
+      // guard to immediately bounce us onward again — that extra hop
+      // through the home screen (mounting all three of its pages) right as
+      // `profile` changes shape was enough to send React Navigation into
+      // "Maximum update depth exceeded".
+      router.replace(consentGiven ? '/' : '/onboarding-health');
     } catch (e) {
       setError(getErrorMessage(e, t('onboarding.location.errors.save')));
     } finally {
