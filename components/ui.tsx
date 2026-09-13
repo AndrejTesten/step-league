@@ -109,7 +109,21 @@ export function Button({ label, loading, variant = 'primary', arrow, style, disa
         <ActivityIndicator color={labelColor} />
       ) : (
         <>
-          <Text style={[isPill ? styles.pillButtonLabel : styles.buttonLabel, { color: labelColor }]}>{label}</Text>
+          {/* numberOfLines=1 + adjustsFontSizeToFit: a translated label
+              (e.g. Italian "Unisciti con un codice" vs English "Join with
+              code") can be much longer than the English original. Letting it
+              wrap made one button in a side-by-side pair taller than the
+              other since only its wrapping View — not the Pressable itself —
+              stretched to match; shrinking to fit one line keeps every
+              button the same height regardless of label length. */}
+          <Text
+            style={[isPill ? styles.pillButtonLabel : styles.buttonLabel, { color: labelColor, flexShrink: 1 }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            {label}
+          </Text>
           {arrow && <Text style={[styles.buttonArrow, { color: labelColor }]}>→</Text>}
         </>
       )}
