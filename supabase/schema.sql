@@ -929,12 +929,38 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- Premium: is_pro (already existed as a stub) now actually gates something.
 -- color_theme is the chosen accent palette — 'lime' is the free default; the
--- other four (cyan/ember/violet/mono) are premium. Enforcement of "premium
--- only" happens client-side for theme selection (cosmetic, low stakes) but
--- server-side for peeks below (a real quota worth actually enforcing).
+-- other four (cyan/ember/violet/mono) are premium.
 -- ---------------------------------------------------------------------------
 alter table public.profiles add column if not exists color_theme text not null default 'lime'
   check (color_theme in ('lime', 'cyan', 'ember', 'violet', 'paper', 'mono'));
+
+-- Enforced here too, not just client-side: a client-side-only check meant a
+-- direct write (bypassing the app's own UI entirely — the theme-picker
+-- screen's now-fixed preview bug was one way this happened by accident, but
+-- nothing stopped a deliberate raw API call either) could make a premium
+-- color stick with no subscription behind it. This resets color_theme back
+-- to the free default instead of rejecting the write outright — friendlier
+-- than an error, and it's also what should happen automatically if a real
+-- subscription lapses (is_pro flips back to false) so a stale premium
+-- selection doesn't linger forever.
+create or replace function public.enforce_color_theme_gating()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if not new.is_pro and new.color_theme <> 'lime' then
+    new.color_theme := 'lime';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_enforce_color_theme on public.profiles;
+create trigger profiles_enforce_color_theme
+  before insert or update on public.profiles
+  for each row
+  execute function public.enforce_color_theme_gating();
 
 -- is_pro must never be settable by the client SDK — the "users update their
 -- own profile" policy above is a row-level check (id = auth.uid()), which

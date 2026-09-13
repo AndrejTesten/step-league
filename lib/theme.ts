@@ -183,6 +183,7 @@ type ThemeContextValue = {
   colors: ThemeColors;
   colorTheme: ColorTheme;
   setColorTheme: (t: ColorTheme) => void;
+  previewColorTheme: (t: ColorTheme | null) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -191,6 +192,14 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const systemScheme = useColorScheme();
   const [mode, setModeState] = useState<ThemeMode>('system');
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(FREE_COLOR_THEME);
+  // A locked (premium, not-owned) theme preview lives only here — never
+  // written to AsyncStorage or Supabase — so it can never outlive the
+  // component that started it. Leaving the theme-picker screen, or the app
+  // being killed mid-preview, both just mean this resets to null and
+  // `colorTheme` (the real, persisted value) is what renders — instead of
+  // the previous bug where the preview *was* the persisted value, so
+  // interrupting the countdown left a premium theme permanently applied.
+  const [previewOverride, setPreviewOverride] = useState<ColorTheme | null>(null);
 
   // Loaded async after first paint (same tradeoff as session restore
   // elsewhere in the app) — worst case the very first frame uses the
@@ -212,17 +221,29 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   // Local-first, same pattern as setMode — the theme picker screen is
   // additionally responsible for persisting this to profiles.color_theme in
-  // Supabase (and for checking is_pro before allowing anything but lime).
+  // Supabase (and for checking is_pro before allowing anything but lime;
+  // the database also enforces this now — see
+  // enforce_color_theme_gating() in supabase/schema.sql).
   function setColorTheme(next: ColorTheme) {
+    setPreviewOverride(null);
     setColorThemeState(next);
     AsyncStorage.setItem(COLOR_STORAGE_KEY, next).catch(() => {});
   }
 
+  // Applies a theme for live preview only — never persisted. Pass null to
+  // clear the preview and fall back to the real `colorTheme`.
+  function previewColorTheme(t: ColorTheme | null) {
+    setPreviewOverride(t);
+  }
+
   const resolvedScheme: 'light' | 'dark' = mode === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : mode;
-  const colors = useMemo(() => buildColors(resolvedScheme, colorTheme), [resolvedScheme, colorTheme]);
+  const colors = useMemo(
+    () => buildColors(resolvedScheme, previewOverride ?? colorTheme),
+    [resolvedScheme, colorTheme, previewOverride]
+  );
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ mode, setMode, resolvedScheme, colors, colorTheme, setColorTheme }),
+    () => ({ mode, setMode, resolvedScheme, colors, colorTheme, setColorTheme, previewColorTheme }),
     [mode, resolvedScheme, colors, colorTheme]
   );
 

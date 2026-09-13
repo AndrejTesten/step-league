@@ -1,9 +1,10 @@
+import { useEffect } from 'react';
 import { Redirect, Stack, useSegments } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { useSession } from '@/lib/auth-context';
 import { useStepsConsent } from '@/lib/steps-consent';
-import { theme, useThemeColors } from '@/lib/theme';
+import { FREE_COLOR_THEME, theme, useThemeColors, useThemeMode } from '@/lib/theme';
 import { useStepSync } from '@/lib/use-step-sync';
 
 // A plain Stack keeps this to two real screens (leagues list, league detail)
@@ -15,6 +16,19 @@ export default function AppLayout() {
   const { consentGiven } = useStepsConsent();
   useStepSync(consentGiven === true);
   const colors = useThemeColors();
+  const { colorTheme, setColorTheme } = useThemeMode();
+
+  // Catches a locally-cached premium theme that shouldn't be active —
+  // e.g. state left over from the theme-picker's timed preview (now fixed
+  // to never persist, but this also cleans up anyone already affected), or
+  // a subscription that's since lapsed. The AsyncStorage-cached colorTheme
+  // is separate from profiles.color_theme and isn't otherwise reconciled
+  // against entitlement until a legitimate selection is made.
+  useEffect(() => {
+    if (profile && !profile.is_pro && colorTheme !== FREE_COLOR_THEME) {
+      setColorTheme(FREE_COLOR_THEME);
+    }
+  }, [profile, colorTheme, setColorTheme]);
   const segments = useSegments();
   const lastSegment = segments[segments.length - 1];
   const onOnboardingLocation = lastSegment === 'onboarding-location';

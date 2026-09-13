@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,32 +24,44 @@ export default function ThemePicker() {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
-  const { resolvedScheme, colorTheme, setColorTheme, setMode } = useThemeMode();
+  const { resolvedScheme, colorTheme, setColorTheme, previewColorTheme, setMode } = useThemeMode();
   const { session, profile, refreshProfile } = useSession();
   const isPro = !!profile?.is_pro;
 
   const [previewing, setPreviewing] = useState<ColorTheme | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const revertToRef = useRef<ColorTheme>(colorTheme);
 
   useEffect(() => {
     if (!previewing) return;
     if (secondsLeft <= 0) {
-      setColorTheme(revertToRef.current);
+      previewColorTheme(null);
       setPreviewing(null);
       router.push('/premium');
       return;
     }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [previewing, secondsLeft, setColorTheme]);
+  }, [previewing, secondsLeft, previewColorTheme]);
+
+  // Leaving this screen — by any route: back button, tab switch, the OS
+  // task switcher killing the app mid-preview — clears the preview
+  // immediately rather than leaving a premium theme applied until a
+  // 10-second timer no longer has a screen to finish counting down on.
+  // (previewColorTheme never persists, so even an app kill is safe: next
+  // launch just has no preview to resume.)
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        previewColorTheme(null);
+      };
+    }, [previewColorTheme])
+  );
 
   async function selectTheme(t: ColorTheme) {
     const locked = PREMIUM_COLOR_THEMES.includes(t) && !isPro;
     if (locked) {
       if (previewing === t) return; // already previewing this one
-      revertToRef.current = colorTheme;
-      setColorTheme(t);
+      previewColorTheme(t);
       setPreviewing(t);
       setSecondsLeft(PREVIEW_SECONDS);
       return;
@@ -219,7 +231,7 @@ function ColorSwatch({
           <View style={{ width: 6, height: 8, backgroundColor: '#2a2d26' }} />
         </View>
       </View>
-      <Text style={[styles.swatchLabel, { color: active ? accents.accent : colors.textMuted }]} numberOfLines={1}>
+      <Text style={[styles.swatchLabel, { color: active || previewing ? accents.accent : colors.textMuted }]} numberOfLines={1}>
         {colorThemeLabel(themeKey)}
         {locked ? t('themePicker.lockedSuffix') : active ? t('themePicker.onSuffix') : ''}
       </Text>
