@@ -75,7 +75,20 @@ export function SessionProvider({ children }: PropsWithChildren) {
           display_name: displayName,
           timezone: getDeviceTimezone(),
         });
-        return { error: profileError?.message ?? null };
+        if (profileError) return { error: profileError.message };
+
+        // auth.signUp() above already fired onAuthStateChange (SIGNED_IN),
+        // which raced this very function to call loadProfile() *before*
+        // the insert just above had run — finding no row yet and leaving
+        // `profile` stuck at null. With `profile` never populated, the
+        // (app) layout's onboarding-location/onboarding-health redirects
+        // (both gated on `profile && ...`) never fired, dropping a brand
+        // new signup straight onto the home screen with no location and no
+        // steps-access consent — invisible until sign-out/sign-in reloaded
+        // the profile correctly. Loading it again here, now that the row
+        // genuinely exists, closes that race.
+        await loadProfile(userId);
+        return { error: null };
       },
       async signOut() {
         await supabase.auth.signOut();

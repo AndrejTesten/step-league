@@ -11,6 +11,7 @@ import { theme, useThemeColors } from '@/lib/theme';
 import type { LeaguePlayedSummary, StepStats } from '@/lib/types';
 
 type Tab = 'leagues' | 'year' | 'alltime';
+type PredictionRow = { label: string; value: string; caption: string; accent?: boolean };
 
 const TAB_OPTIONS: { value: Tab; label: string }[] = [
   { value: 'leagues', label: 'Leagues' },
@@ -40,6 +41,66 @@ function ordinal(n: number): string {
     default:
       return `${n}th`;
   }
+}
+
+const MILESTONES = [100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+function daysElapsedInYear(year: number): number {
+  const start = new Date(year, 0, 1).getTime();
+  const now = Date.now();
+  if (new Date().getFullYear() > year) return isLeapYear(year) ? 366 : 365;
+  return Math.floor((now - start) / 86400000) + 1;
+}
+
+/** Straight-line projection from this year's pace so far — only offered once there's enough of the year behind it to mean something. */
+function yearEndProjection(yearTotal: number, year: number): number | null {
+  if (year !== new Date().getFullYear()) return null;
+  const elapsed = daysElapsedInYear(year);
+  if (elapsed < 14) return null;
+  const daysInYear = isLeapYear(year) ? 366 : 365;
+  return Math.round((yearTotal / elapsed) * daysInYear);
+}
+
+function dateKeyDaysAgo(daysAgo: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Average steps/day (including rest days — this is a real pace, not an active-day average) over a trailing window. */
+function windowDailyRate(dailyMap: Map<string, number>, startDaysAgo: number, endDaysAgo: number): number {
+  let total = 0;
+  let count = 0;
+  for (let i = startDaysAgo; i < endDaysAgo; i++) {
+    total += dailyMap.get(dateKeyDaysAgo(i)) ?? 0;
+    count += 1;
+  }
+  return count ? total / count : 0;
+}
+
+/** Compares two equal, back-to-back trailing windows (e.g. last 14 days vs the 14 before that) — null when there's not enough history to compare. */
+function recentTrend(dailyMap: Map<string, number>, windowDays: number): { pct: number; direction: 'up' | 'down' | 'flat' } | null {
+  const recent = windowDailyRate(dailyMap, 0, windowDays);
+  const prior = windowDailyRate(dailyMap, windowDays, windowDays * 2);
+  if (recent === 0 || prior === 0) return null;
+  const pct = Math.round(((recent - prior) / prior) * 100);
+  return { pct, direction: pct > 3 ? 'up' : pct < -3 ? 'down' : 'flat' };
+}
+
+/** Next round-number milestone above the current all-time total, and an estimated date based on the last 90 days' real pace. */
+function milestoneProjection(total: number, dailyMap: Map<string, number>): { milestone: number; days: number; date: Date } | null {
+  const milestone = MILESTONES.find((m) => m > total);
+  if (!milestone) return null;
+  const rate = windowDailyRate(dailyMap, 0, 90);
+  if (rate <= 0) return null;
+  const days = Math.ceil((milestone - total) / rate);
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return { milestone, days, date };
 }
 
 function longestStreak(dailyMap: Map<string, number>): number {
@@ -180,6 +241,54 @@ export default function StatsHistory() {
 
   const streak = useMemo(() => longestStreak(dailyMap), [dailyMap]);
 
+  const yearProjection = useMemo(() => yearEndProjection(stats?.year ?? 0, year), [stats?.year, year]);
+  const yearTrend = useMemo(() => recentTrend(dailyMap, 14), [dailyMap]);
+  const yearConsistency = yearActiveDays ? Math.round((yearActiveDays / daysElapsedInYear(year)) * 100) : 0;
+
+  const allTimeTrend = useMemo(() => recentTrend(dailyMap, 30), [dailyMap]);
+  const allTimeConsistency = stats?.daysLogged && daysTracked ? Math.round((stats.daysLogged / daysTracked) * 100) : 0;
+  const milestone = useMemo(() => milestoneProjection(stats?.allTime ?? 0, dailyMap), [stats?.allTime, dailyMap]);
+
+  const yearPredictions: PredictionRow[] = [
+    ...(yearProjection
+      ? [{ label: 'Year-end pace', value: compactNumber(yearProjection), caption: 'At your average since Jan 1, projected to Dec 31.' }]
+      : []),
+    ...(yearTrend
+      ? [
+          {
+            label: 'Trend',
+            value: `${yearTrend.pct > 0 ? '+' : ''}${yearTrend.pct}%`,
+            caption: 'Last 14 days vs. the 14 before that.',
+            accent: yearTrend.direction === 'up',
+          },
+        ]
+      : []),
+    { label: 'Consistency', value: `${yearConsistency}%`, caption: 'Share of days this year with steps logged.' },
+  ];
+
+  const allTimePredictions: PredictionRow[] = [
+    ...(milestone
+      ? [
+          {
+            label: `Next milestone: ${compactNumber(milestone.milestone)}`,
+            value: `~${milestone.days}d`,
+            caption: `Around ${milestone.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}, at your last 90 days' pace.`,
+          },
+        ]
+      : []),
+    ...(allTimeTrend
+      ? [
+          {
+            label: 'Trend',
+            value: `${allTimeTrend.pct > 0 ? '+' : ''}${allTimeTrend.pct}%`,
+            caption: 'Last 30 days vs. the 30 before that.',
+            accent: allTimeTrend.direction === 'up',
+          },
+        ]
+      : []),
+    { label: 'Consistency', value: `${allTimeConsistency}%`, caption: 'Share of all tracked days with steps logged.' },
+  ];
+
   if (!profile?.is_pro) return null;
 
   return (
@@ -217,6 +326,7 @@ export default function StatsHistory() {
               total={stats?.year ?? 0}
               dailyAvg={yearDailyAvg}
               winRate={yearWinRate}
+              predictions={yearPredictions}
               chartTitle="Monthly average"
               chartBars={monthAverages.map((m) => ({ key: String(m.month), value: m.avg }))}
               chartAxis={monthlyAxis(monthAverages)}
@@ -230,6 +340,7 @@ export default function StatsHistory() {
               total={stats?.allTime ?? 0}
               dailyAvg={allTimeDailyAvg}
               winRate={allTimeWinRate}
+              predictions={allTimePredictions}
               chartTitle="Yearly average"
               chartBars={yearAverages.map((y) => ({ key: y.year, value: y.avg }))}
               chartAxis={yearlyAxis(yearAverages)}
@@ -294,6 +405,7 @@ function ScopeSection({
   total,
   dailyAvg,
   winRate,
+  predictions,
   chartTitle,
   chartBars,
   chartAxis,
@@ -305,6 +417,7 @@ function ScopeSection({
   total: number;
   dailyAvg: number;
   winRate: number | null;
+  predictions: PredictionRow[];
   chartTitle: string;
   chartBars: { key: string; value: number }[];
   chartAxis: [string, string, string];
@@ -325,7 +438,29 @@ function ScopeSection({
         <StatCard label="Win rate" value={winRate === null ? '—' : `${winRate}%`} />
       </View>
 
-      <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>{chartTitle}</Text>
+      {predictions.length > 0 && (
+        <>
+          <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>Predictions</Text>
+          <View style={[styles.predictionsCard, { backgroundColor: colors.card }]}>
+            {predictions.map((p, i) => (
+              <View key={p.label} style={[styles.predictionRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12.5, fontFamily: theme.fontFamily.bodySemiBold, color: colors.text }}>{p.label}</Text>
+                  <Text style={{ marginTop: 2, fontSize: 11, lineHeight: 15, color: colors.textDim, fontFamily: theme.fontFamily.bodyMedium }}>{p.caption}</Text>
+                </View>
+                <Text style={{ fontSize: 20, fontFamily: theme.fontFamily.heading, color: p.accent ? colors.accent : colors.text, fontVariant: ['tabular-nums'] }}>
+                  {p.value}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <Text style={[styles.predictionsFootnote, { color: colors.textDim }]}>
+            Estimates from your own recent pace — not a guarantee, just where today's trend leads.
+          </Text>
+        </>
+      )}
+
+      <Text style={[styles.sectionHeading, { color: colors.textMuted, marginTop: predictions.length > 0 ? theme.space(5) : 0 }]}>{chartTitle}</Text>
       <View style={{ gap: theme.space(1.5) }}>
         <View style={styles.chartRow}>
           {chartBars.map((b, i) => (
@@ -526,5 +661,21 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontFamily: theme.fontFamily.bodyMedium,
     maxWidth: 320,
+  },
+  predictionsCard: {
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.space(4),
+  },
+  predictionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.space(3),
+    paddingVertical: theme.space(3.25),
+  },
+  predictionsFootnote: {
+    marginTop: theme.space(2),
+    fontSize: 10.5,
+    lineHeight: 14,
+    fontFamily: theme.fontFamily.bodyMedium,
   },
 });
