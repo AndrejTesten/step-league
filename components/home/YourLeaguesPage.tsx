@@ -64,13 +64,14 @@ export function YourLeaguesPage({ width }: { width: number }) {
     <Screen style={{ width, paddingTop: theme.space(14) }}>
       <View style={{ gap: theme.space(3.5), marginBottom: theme.space(4) }}>
         <Title>{t('home.yourLeagues.title')}</Title>
-        <View style={{ flexDirection: 'row', gap: theme.space(2) }}>
-          <View style={{ flex: 1 }}>
-            <Button label={t('home.yourLeagues.createLeague')} onPress={() => router.push('/leagues/create')} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Button label={t('home.yourLeagues.joinWithCode')} variant="secondary" onPress={() => router.push('/leagues/join')} />
-          </View>
+        <View style={{ flexDirection: 'row', gap: theme.space(2), alignItems: 'stretch' }}>
+          <Button style={{ flex: 1 }} label={t('home.yourLeagues.createLeague')} onPress={() => router.push('/leagues/create')} />
+          <Button
+            style={{ flex: 1 }}
+            label={t('home.yourLeagues.joinWithCode')}
+            variant="secondary"
+            onPress={() => router.push('/leagues/join')}
+          />
         </View>
       </View>
 

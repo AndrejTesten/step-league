@@ -109,19 +109,16 @@ export function Button({ label, loading, variant = 'primary', arrow, style, disa
         <ActivityIndicator color={labelColor} />
       ) : (
         <>
-          {/* numberOfLines=1 + adjustsFontSizeToFit: a translated label
+          {/* adjustsFontSizeToFit turned out unreliable on Android (label
+              stayed truncated instead of shrinking) — a translated label
               (e.g. Italian "Unisciti con un codice" vs English "Join with
-              code") can be much longer than the English original. Letting it
-              wrap made one button in a side-by-side pair taller than the
-              other since only its wrapping View — not the Pressable itself —
-              stretched to match; shrinking to fit one line keeps every
-              button the same height regardless of label length. */}
-          <Text
-            style={[isPill ? styles.pillButtonLabel : styles.buttonLabel, { color: labelColor, flexShrink: 1 }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-          >
+              code") can still wrap to two lines here. That's fine as long as
+              the Pressable itself — not just a wrapping View around it —
+              grows to match its sibling's height; see the call sites (no
+              more `<View style={{ flex: 1 }}><Button .../></View>` wrapper,
+              `flex: 1` goes on the Button directly) for the other half of
+              this fix. */}
+          <Text style={[isPill ? styles.pillButtonLabel : styles.buttonLabel, { color: labelColor, flexShrink: 1 }]}>
             {label}
           </Text>
           {arrow && <Text style={[styles.buttonArrow, { color: labelColor }]}>→</Text>}

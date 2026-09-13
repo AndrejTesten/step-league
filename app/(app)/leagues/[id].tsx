@@ -533,13 +533,14 @@ export default function LeagueDetail() {
                         {restartError && (
                           <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium }}>{restartError}</Text>
                         )}
-                        <View style={{ flexDirection: 'row', gap: theme.space(3) }}>
-                          <View style={{ flex: 1 }}>
-                            <Button label={t('common.cancel')} variant="secondary" onPress={() => setRestarting(false)} />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Button label={t('leagues.detail.confirm')} onPress={handleConfirmRestart} loading={restartLoading} />
-                          </View>
+                        <View style={{ flexDirection: 'row', gap: theme.space(3), alignItems: 'stretch' }}>
+                          <Button style={{ flex: 1 }} label={t('common.cancel')} variant="secondary" onPress={() => setRestarting(false)} />
+                          <Button
+                            style={{ flex: 1 }}
+                            label={t('leagues.detail.confirm')}
+                            onPress={handleConfirmRestart}
+                            loading={restartLoading}
+                          />
                         </View>
                       </View>
                     )
@@ -725,13 +726,15 @@ export default function LeagueDetail() {
           {exitError && (
             <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small }}>{exitError}</Text>
           )}
-          <View style={{ flexDirection: 'row', gap: theme.space(3) }}>
-            <View style={{ flex: 1 }}>
-              <Button label={t('leagues.detail.stay')} variant="secondary" onPress={() => setExitSheetOpen(false)} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button label={t('leagues.detail.exitLeague')} variant="danger" onPress={handleExitLeague} loading={exiting} />
-            </View>
+          <View style={{ flexDirection: 'row', gap: theme.space(3), alignItems: 'stretch' }}>
+            <Button style={{ flex: 1 }} label={t('leagues.detail.stay')} variant="secondary" onPress={() => setExitSheetOpen(false)} />
+            <Button
+              style={{ flex: 1 }}
+              label={t('leagues.detail.exitLeague')}
+              variant="danger"
+              onPress={handleExitLeague}
+              loading={exiting}
+            />
           </View>
         </View>
       </Sheet>
