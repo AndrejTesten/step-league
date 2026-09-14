@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, Button, Input, Screen, SearchableSelect, SectionLabel, Tabs } from '@/components/ui';
@@ -12,6 +13,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { fetchCitiesForCountry, fetchCountries } from '@/lib/geo';
 import { SUPPORTED_LANGUAGES, useLanguage } from '@/lib/i18n';
 import { getMyTotalWins, listMyLeagues } from '@/lib/leagues';
+import { getNotificationStatus, type NotificationStatus } from '@/lib/push-notifications';
 import { getStepStats } from '@/lib/stats';
 import { supabase } from '@/lib/supabase';
 import { theme, useThemeColors, useThemeMode, type ThemeMode } from '@/lib/theme';
@@ -45,6 +47,15 @@ export default function Profile() {
   const [wins, setWins] = useState(0);
   const [timezoneSaving, setTimezoneSaving] = useState(false);
   const [timezoneError, setTimezoneError] = useState<string | null>(null);
+  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus | null>(null);
+
+  // Re-checked on every focus, including right after coming back from the
+  // OS Settings app — see StepCounterPage's identical pattern.
+  useFocusEffect(
+    useCallback(() => {
+      getNotificationStatus().then(setNotificationStatus);
+    }, [])
+  );
 
   useEffect(() => {
     setCity(profile?.city ?? '');
@@ -283,10 +294,38 @@ export default function Profile() {
             )}
           </View>
         )}
-        <View style={[styles.settingRow, { borderTopColor: colors.border, borderBottomWidth: theme.border, borderBottomColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}>
+        <Pressable
+          onPress={() => Linking.openSettings()}
+          style={[styles.settingRow, { borderTopColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}
+        >
           <SectionLabel>{t('profile.notifications.label')}</SectionLabel>
-          <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>{t('profile.notifications.resultsOnly')}</Text>
-        </View>
+          <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: notificationStatus === 'granted' ? colors.text : colors.danger }}>
+            {notificationStatus === 'granted' ? t('profile.notifications.on') : t('profile.notifications.off')}
+          </Text>
+        </Pressable>
+        {notificationStatus && notificationStatus !== 'granted' && notificationStatus !== 'unsupported' && (
+          <Text style={{ fontSize: 11.5, lineHeight: 16, fontFamily: theme.fontFamily.bodyMedium, color: colors.danger, paddingBottom: theme.space(1) }}>
+            {t('profile.notifications.warning')}
+          </Text>
+        )}
+        <Pressable
+          onPress={() =>
+            Platform.OS === 'android'
+              ? IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+              : Linking.openSettings()
+          }
+          style={[styles.settingRow, { borderTopColor: colors.border, borderBottomWidth: theme.border, borderBottomColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}
+        >
+          <SectionLabel>
+            {Platform.OS === 'android' ? t('profile.batteryOptimization.label') : t('profile.backgroundRefresh.label')}
+          </SectionLabel>
+          <Text style={{ fontSize: 13, fontFamily: theme.fontFamily.bodySemiBold, color: colors.accent }}>
+            {t('profile.checkInSettings')} →
+          </Text>
+        </Pressable>
+        <Text style={{ fontSize: 11.5, lineHeight: 16, fontFamily: theme.fontFamily.bodyMedium, color: colors.textDim, paddingTop: theme.space(2) }}>
+          {Platform.OS === 'android' ? t('profile.batteryOptimization.explain') : t('profile.backgroundRefresh.explain')}
+        </Text>
 
         <View style={{ paddingTop: theme.space(5), gap: theme.space(2.75) }}>
           {profile?.is_pro ? (

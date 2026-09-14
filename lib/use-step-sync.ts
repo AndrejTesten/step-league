@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { useSession } from './auth-context';
+import { ensurePushRegistration } from './push-notifications';
 import { getDaysToBackfill, recordFullSyncNow } from './steps-shared';
 import { syncSteps } from './steps'; // Metro resolves steps.ios.ts / steps.android.ts / steps.web.ts
 
@@ -73,7 +74,13 @@ export function useStepSync(enabled: boolean) {
           const isFullSync = daysToBackfill === undefined;
           const days = isFullSync ? await getDaysToBackfill() : daysToBackfill;
           await syncSteps(p.timezone, days);
-          if (isFullSync) await recordFullSyncNow();
+          if (isFullSync) {
+            await recordFullSyncNow();
+            // Cheap no-op once actually registered — see that function's
+            // own comment for why this can't just happen once at
+            // onboarding time and be done with it.
+            ensurePushRegistration(s.user.id).catch(() => {});
+          }
         }
       } finally {
         syncing = false;

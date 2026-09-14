@@ -9,7 +9,8 @@
     "tryAgain": "Réessayer",
     "close": "Fermer",
     "you": "Toi",
-    "noMatches": "Aucun résultat."
+    "noMatches": "Aucun résultat.",
+    "openSettings": "Ouvrir les réglages"
   },
   "app": {
     "error": {
@@ -90,8 +91,19 @@
     },
     "notifications": {
       "label": "Notifications",
-      "resultsOnly": "Résultats seulement"
+      "on": "Activées",
+      "off": "Désactivées",
+      "warning": "Active les notifications pour synchroniser tes pas automatiquement — sinon le classement de ta ligue pourrait être faux les jours où tu n'ouvres pas l'appli."
     },
+    "batteryOptimization": {
+      "label": "Optimisation de la batterie",
+      "explain": "Trouve Step League dans la liste et choisis \"Ne pas optimiser\" — sinon Android pourrait arrêter la synchronisation en arrière-plan."
+    },
+    "backgroundRefresh": {
+      "label": "Actualisation en arrière-plan",
+      "explain": "Vérifie qu'elle est activée pour Step League dans les Réglages — sinon iOS peut retarder la synchronisation en arrière-plan. Évite aussi de fermer complètement l'appli depuis le multitâche : ça arrête totalement la synchronisation en arrière-plan."
+    },
+    "checkInSettings": "Vérifier dans les Réglages",
     "premium": {
       "active": "Premium actif",
       "priceArrow": "1,99 €/mois →",
@@ -144,6 +156,7 @@
         "permission_denied": "L'autorisation pour les pas a été refusée. Ouvre Health Connect → Autorisations des applis → StepLeague et autorise les pas.",
         "unknown": "Les pas ne se synchronisent pas pour le moment. On continue d'essayer."
       },
+      "notificationsOff": "Les notifications sont désactivées. Tes pas risquent de ne pas atteindre tes ligues les jours où tu n'ouvres pas l'appli.",
       "todayLabel": "Aujourd'hui · {{date}}",
       "steps": "Pas",
       "goalPct": "{{percent}} % de {{goal}}",
@@ -381,6 +394,10 @@
           "title": "Qui le voit",
           "body": "Seulement les ligues que tu rejoins, et seulement après 22h00."
         },
+        "backgroundSync": {
+          "title": "Synchronisation en arrière-plan",
+          "body": "Une notification silencieuse réveille brièvement l'appli vers 22h00 pour que tes pas atteignent tes ligues même si tu n'ouvres pas l'appli ce jour-là."
+        },
         "whatWeNeverTouch": {
           "title": "Ce qu'on ne touche jamais",
           "body": "Localisation, trajets, fréquence cardiaque, entraînements ou tout autre chose dans Santé. Pas de pub, pas de tiers, aucune donnée revendue."
@@ -388,10 +405,16 @@
       },
       "agreeLabel": "J'accepte que Step League lise mon nombre de pas quotidien.",
       "privacyNoteLink": "Note sur la confidentialité · ~210 mots, langage simple.",
-      "notifyOptIn": "Envoie-moi aussi une notification à 22h00 quand les scores tombent. Facultatif, on te le redemandera séparément plus tard.",
+      "notificationsRequired": {
+        "label": "J'autorise Step League à envoyer des notifications pour synchroniser mes pas en arrière-plan.",
+        "warning": "Obligatoire — sans ça, le classement de ta ligue pourrait être faux les jours où tu n'ouvres pas l'appli."
+      },
+      "errors": {
+        "notificationsDenied": "Les notifications ont été refusées. Step League en a besoin pour garder le classement de ta ligue exact — active les notifications dans les Réglages et réessaie."
+      },
       "footnote": "Ton téléphone va te le demander ensuite. Tu peux refuser, ou changer ça à tout moment dans Profil.",
       "privacyNoteTitle": "Note sur la confidentialité",
-      "privacyNoteBody": "Step League lit un seul chiffre dans les données de santé de ton téléphone : ton nombre total de pas pour chaque jour. C'est tout : pas ta localisation, tes trajets, ta fréquence cardiaque, tes entraînements, ni rien d'autre que Santé/Health Connect suit.\n\nCe total quotidien est enregistré dans notre base de données (Supabase), lié à ton compte, pour pouvoir être comparé aux autres membres des ligues que tu choisis de rejoindre. Les classements n'affichent jamais que le total d'hier et d'avant. Le chiffre d'aujourd'hui reste privé jusqu'à la mise à jour de 22h00, chaque jour, sans exception.\n\nOn ne diffuse pas de pub et on n'a pas de SDK d'analyse ou de publicité qui lit ces données. On ne les vend pas, on ne les concède pas sous licence et on ne les partage avec aucun tiers. Elles ne servent à entraîner aucun modèle. Les seules personnes qui peuvent voir tes totaux de pas sont les autres membres des ligues que tu as toi-même rejointes, et seulement pour les jours déjà verrouillés.\n\nSi tu quittes une ligue, tes anciens totaux restent visibles dans l'historique de cette ligue, comme pour tout le monde. Le fait de partir ne masque pas rétroactivement les classements déjà verrouillés. Tu peux révoquer l'accès à tes pas à tout moment depuis les réglages Santé/Health Connect de ton téléphone, ou arrêter la synchronisation depuis le Profil de Step League. Supprimer ton compte supprime aussi ton historique de pas.\n\nUne seule personne développe cette appli et lit cette note exactement comme tu la lis maintenant : simplement, et chaque mot est sincère."
+      "privacyNoteBody": "Step League lit un seul chiffre dans les données de santé de ton téléphone : ton nombre total de pas pour chaque jour. C'est tout : pas ta localisation, tes trajets, ta fréquence cardiaque, tes entraînements, ni rien d'autre que Santé/Health Connect suit.\n\nCe total quotidien est enregistré dans notre base de données (Supabase), lié à ton compte, pour pouvoir être comparé aux autres membres des ligues que tu choisis de rejoindre. Les classements n'affichent jamais que le total d'hier et d'avant. Le chiffre d'aujourd'hui reste privé jusqu'à la mise à jour de 22h00, chaque jour, sans exception.\n\nStep League demande aussi la permission d'envoyer des notifications. Ce n'est pas pour de la pub — ça permet à l'appli de se réveiller brièvement vers 22h00 et de synchroniser tes pas même un jour où tu ne l'ouvres jamais, pour que tes coéquipiers de ligue voient quand même un classement exact. Ce réveil utilise une notification push silencieuse et sans contenu ; rien ne s'affiche sauf si tu as aussi choisi d'être prévenu quand tes résultats arrivent. Le jeton push de ton appareil est enregistré, lié à ton compte, uniquement pour cet usage et n'est jamais utilisé pour autre chose.\n\nOn ne diffuse pas de pub et on n'a pas de SDK d'analyse ou de publicité qui lit ces données. On ne les vend pas, on ne les concède pas sous licence et on ne les partage avec aucun tiers. Elles ne servent à entraîner aucun modèle. Les seules personnes qui peuvent voir tes totaux de pas sont les autres membres des ligues que tu as toi-même rejointes, et seulement pour les jours déjà verrouillés.\n\nSi tu quittes une ligue, tes anciens totaux restent visibles dans l'historique de cette ligue, comme pour tout le monde. Le fait de partir ne masque pas rétroactivement les classements déjà verrouillés. Tu peux révoquer l'accès à tes pas à tout moment depuis les réglages Santé/Health Connect de ton téléphone, révoquer les notifications depuis les réglages système de ton téléphone, ou arrêter la synchronisation depuis le Profil de Step League. Supprimer ton compte supprime aussi ton historique de pas.\n\nUne seule personne développe cette appli et lit cette note exactement comme tu la lis maintenant : simplement, et chaque mot est sincère."
     }
   },
   "premium": {

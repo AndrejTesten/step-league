@@ -9,7 +9,8 @@
     "tryAgain": "Reintentar",
     "close": "Cerrar",
     "you": "Tú",
-    "noMatches": "Sin resultados."
+    "noMatches": "Sin resultados.",
+    "openSettings": "Abrir ajustes"
   },
   "app": {
     "error": {
@@ -90,8 +91,19 @@
     },
     "notifications": {
       "label": "Notificaciones",
-      "resultsOnly": "Solo resultados"
+      "on": "Activadas",
+      "off": "Desactivadas",
+      "warning": "Activa las notificaciones para sincronizar tus pasos automáticamente — si no, la clasificación de tu liga podría estar mal los días que no abras la app."
     },
+    "batteryOptimization": {
+      "label": "Optimización de batería",
+      "explain": "Busca Step League en la lista y elige \"No optimizar\" — si no, Android podría detener la sincronización en segundo plano."
+    },
+    "backgroundRefresh": {
+      "label": "Actualización en segundo plano",
+      "explain": "Asegúrate de que esté activada para Step League en Ajustes — si no, iOS podría retrasar la sincronización en segundo plano. Evita también cerrar la app por completo desde el selector de apps: eso detiene la sincronización en segundo plano por completo."
+    },
+    "checkInSettings": "Comprobar en Ajustes",
     "premium": {
       "active": "Premium activo",
       "priceArrow": "1,99 €/mes →",
@@ -144,6 +156,7 @@
         "permission_denied": "Se denegó el permiso de pasos. Abre Health Connect → Permisos de la app → StepLeague y permite los pasos.",
         "unknown": "Los pasos no se están sincronizando ahora mismo. Seguiremos intentándolo."
       },
+      "notificationsOff": "Las notificaciones están desactivadas. Es posible que tus pasos no lleguen a tus ligas los días que no abras la app.",
       "todayLabel": "Hoy · {{date}}",
       "steps": "Pasos",
       "goalPct": "{{percent}}% de {{goal}}",
@@ -381,6 +394,10 @@
           "title": "Quién lo ve",
           "body": "Solo las ligas a las que te unes, y solo después de las 22:00."
         },
+        "backgroundSync": {
+          "title": "Sincronización en segundo plano",
+          "body": "Una notificación silenciosa reactiva la app brevemente hacia las 22:00 para que tus pasos lleguen a tus ligas aunque no abras la app ese día."
+        },
         "whatWeNeverTouch": {
           "title": "Lo que nunca tocamos",
           "body": "Ubicación, rutas, frecuencia cardíaca, entrenamientos o cualquier otra cosa en Salud. Sin anuncios, sin terceros, sin vender datos."
@@ -388,10 +405,16 @@
       },
       "agreeLabel": "Acepto que Step League lea mi conteo diario de pasos.",
       "privacyNoteLink": "Nota de privacidad · ~210 palabras, lenguaje sencillo.",
-      "notifyOptIn": "Mándame también una notificación a las 22:00 cuando lleguen los resultados. Opcional, te lo preguntaremos por separado más adelante.",
+      "notificationsRequired": {
+        "label": "Permito que Step League envíe notificaciones para poder sincronizar mis pasos en segundo plano.",
+        "warning": "Obligatorio — sin esto, la clasificación de tu liga podría estar mal los días que no abras la app."
+      },
+      "errors": {
+        "notificationsDenied": "Se denegaron las notificaciones. Step League las necesita para mantener correcta la clasificación de tu liga — activa las notificaciones en Ajustes e inténtalo de nuevo."
+      },
       "footnote": "Tu teléfono te preguntará a continuación. Puedes decir que no ahí, o cambiarlo cuando quieras en Perfil.",
       "privacyNoteTitle": "Nota de privacidad",
-      "privacyNoteBody": "Step League lee un solo número de los datos de salud de tu teléfono: tu total de pasos de cada día. Eso es todo: no tu ubicación, tus rutas, tu frecuencia cardíaca, tus entrenamientos ni nada más de lo que registra Salud/Health Connect.\n\nEse total diario se guarda en nuestra base de datos (Supabase) vinculado a tu cuenta, para poder compararlo con los demás miembros de las ligas a las que decidas unirte. Las clasificaciones solo muestran el total de ayer en adelante. El conteo de hoy se mantiene privado para ti hasta la actualización de las 22:00, todos los días, sin excepción.\n\nNo mostramos anuncios y no tenemos ningún SDK de análisis o publicidad que lea estos datos. No los vendemos, no los licenciamos ni los compartimos con terceros. No se usan para entrenar ningún modelo. Las únicas personas que pueden ver tus totales de pasos son los demás miembros de las ligas a las que te has unido personalmente, y solo para los días que ya están cerrados.\n\nSi dejas una liga, tus totales pasados siguen visibles en el historial de esa liga, igual que los de todos los demás. Salir no oculta retroactivamente las clasificaciones ya cerradas. Puedes revocar el acceso a tus pasos en cualquier momento desde los ajustes de Salud/Health Connect de tu teléfono, o dejar de sincronizar desde el propio Perfil de Step League. Eliminar tu cuenta elimina también tu historial de pasos.\n\nUna sola persona desarrolla esta app y lee esta nota igual que tú la estás leyendo ahora: en lenguaje llano, y con cada palabra en serio."
+      "privacyNoteBody": "Step League lee un solo número de los datos de salud de tu teléfono: tu total de pasos de cada día. Eso es todo: no tu ubicación, tus rutas, tu frecuencia cardíaca, tus entrenamientos ni nada más de lo que registra Salud/Health Connect.\n\nEse total diario se guarda en nuestra base de datos (Supabase) vinculado a tu cuenta, para poder compararlo con los demás miembros de las ligas a las que decidas unirte. Las clasificaciones solo muestran el total de ayer en adelante. El conteo de hoy se mantiene privado para ti hasta la actualización de las 22:00, todos los días, sin excepción.\n\nStep League también pide permiso de notificaciones. No es para publicidad — sirve para que la app pueda reactivarse brevemente hacia las 22:00 y sincronizar tus pasos incluso un día que nunca la abras, para que tus compañeros de liga sigan viendo una clasificación correcta. Esa reactivación usa una notificación push silenciosa y sin contenido; no se muestra nada a menos que también hayas elegido que te avisemos cuando lleguen tus resultados. El token push de tu dispositivo se guarda vinculado a tu cuenta solo para este propósito y nunca se usa para nada más.\n\nNo mostramos anuncios y no tenemos ningún SDK de análisis o publicidad que lea estos datos. No los vendemos, no los licenciamos ni los compartimos con terceros. No se usan para entrenar ningún modelo. Las únicas personas que pueden ver tus totales de pasos son los demás miembros de las ligas a las que te has unido personalmente, y solo para los días que ya están cerrados.\n\nSi dejas una liga, tus totales pasados siguen visibles en el historial de esa liga, igual que los de todos los demás. Salir no oculta retroactivamente las clasificaciones ya cerradas. Puedes revocar el acceso a tus pasos en cualquier momento desde los ajustes de Salud/Health Connect de tu teléfono, revocar las notificaciones desde los ajustes del sistema de tu teléfono, o dejar de sincronizar desde el propio Perfil de Step League. Eliminar tu cuenta elimina también tu historial de pasos.\n\nUna sola persona desarrolla esta app y lee esta nota igual que tú la estás leyendo ahora: en lenguaje llano, y con cada palabra en serio."
     }
   },
   "premium": {

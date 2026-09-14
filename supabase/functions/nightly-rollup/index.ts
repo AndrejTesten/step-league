@@ -8,14 +8,22 @@
 // which users just hit 22:00 local time and only act on those.
 //
 // What it does each run:
-//   1. Ask Postgres (get_due_profile_ids) which profiles are currently in
+//   1. Send a silent "sync now" push to anyone in their 21:30-21:59 local
+//      window (get_presync_due_profile_ids) — this is what makes a day's
+//      steps show up for league-mates at 22:00 even if that person never
+//      opens the app: the push wakes it just long enough to sync before
+//      the window below closes. See lib/push-notifications.ts for the
+//      client side that handles this push.
+//   2. Ask Postgres (get_due_profile_ids) which profiles are currently in
 //      the 22:00-22:14 local-time window ("due" users). This runs as SQL
 //      so only the due rows cross the wire, not every profile in the app.
-//   2. Find just the still-active leagues (deadline >= today) that have at
+//   3. Find just the still-active leagues (deadline >= today) that have at
 //      least one due member, then fetch every member of *those* leagues
 //      (not every membership in the app) plus one batched daily_steps
 //      query covering all of them, and recompute each league's standings
 //      fresh, writing a new snapshot row per member.
+//   4. Send a visible "your results are in" push to due users who opted
+//      into profiles.notify_results.
 //
 // Recomputing the whole league (not just the due member) on every trigger
 // keeps ranks consistent even when a league's members span timezones —
@@ -42,6 +50,39 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+// Expo's push API caps a single request at 100 messages, and has no auth
+// requirement for the volume this app is at (an EXPO_ACCESS_TOKEN secret
+// could be added later if that ever changes — see
+// https://docs.expo.dev/push-notifications/sending-notifications/).
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+type PushMessage = {
+  to: string;
+  data?: Record<string, unknown>;
+  title?: string;
+  body?: string;
+  sound?: 'default' | null;
+  priority?: 'default' | 'normal' | 'high';
+  _contentAvailable?: boolean;
+};
+
+async function sendExpoPushMessages(messages: PushMessage[]): Promise<void> {
+  for (const batch of chunk(messages, 100)) {
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(batch),
+      });
+      if (!res.ok) {
+        console.error(`Expo push send failed: ${res.status} ${await res.text()}`);
+      }
+    } catch (err) {
+      console.error(`Expo push send threw: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
 Deno.serve(async (req) => {
   // Cheap shared-secret check so this endpoint can't be triggered by
   // randoms hammering the public URL. Set CRON_SECRET as a function secret
@@ -64,6 +105,41 @@ Deno.serve(async (req) => {
   const now = new Date();
   const todayUtcKey = now.toISOString().slice(0, 10);
 
+  // Step 1: wake-and-sync push for anyone approaching their local 22:00 —
+  // see get_presync_due_profile_ids's own comment for why. Runs
+  // unconditionally, independent of whether anyone is *at* 22:00 this
+  // tick, so a failure here never blocks the actual rollup below.
+  let presyncPushesSent = 0;
+  const { data: presyncProfiles, error: presyncError } = await supabase.rpc('get_presync_due_profile_ids', {
+    p_now: now.toISOString(),
+  });
+  if (presyncError) {
+    console.error(`get_presync_due_profile_ids: ${presyncError.message}`);
+  } else {
+    const presyncUserIds = ((presyncProfiles ?? []) as { id: string }[]).map((r) => r.id);
+    for (const idChunk of chunk(presyncUserIds, 500)) {
+      const { data: tokenRows, error: tokenError } = await supabase
+        .from('push_tokens')
+        .select('token')
+        .in('user_id', idChunk);
+      if (tokenError) {
+        console.error(`push_tokens (presync): ${tokenError.message}`);
+        continue;
+      }
+      const messages: PushMessage[] = ((tokenRows ?? []) as { token: string }[]).map((r) => ({
+        to: r.token,
+        data: { type: 'background-sync' },
+        priority: 'high',
+        _contentAvailable: true,
+        // No title/body/sound — a silent, data-only push. It should never
+        // show anything; it exists purely to wake the app's background
+        // handler (see lib/push-notifications.ts) so it can sync steps.
+      }));
+      await sendExpoPushMessages(messages);
+      presyncPushesSent += messages.length;
+    }
+  }
+
   const { data: dueProfiles, error: dueError } = await supabase.rpc('get_due_profile_ids', {
     p_now: now.toISOString(),
   });
@@ -73,7 +149,7 @@ Deno.serve(async (req) => {
 
   const dueUserIds = ((dueProfiles ?? []) as { id: string }[]).map((r) => r.id);
   if (dueUserIds.length === 0) {
-    return new Response(JSON.stringify({ dueUsers: 0, processedLeagues: 0 }), {
+    return new Response(JSON.stringify({ presyncPushesSent, dueUsers: 0, processedLeagues: 0 }), {
       headers: { 'content-type': 'application/json' },
     });
   }
@@ -97,9 +173,10 @@ Deno.serve(async (req) => {
   }
 
   if (leaguesToProcess.size === 0) {
-    return new Response(JSON.stringify({ dueUsers: dueUserIds.length, processedLeagues: 0 }), {
-      headers: { 'content-type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ presyncPushesSent, dueUsers: dueUserIds.length, processedLeagues: 0 }),
+      { headers: { 'content-type': 'application/json' } }
+    );
   }
 
   type MemberRow = {
@@ -207,11 +284,51 @@ Deno.serve(async (req) => {
     for (const r of rowChunk) processedLeagueIds.add(r.league_id);
   }
 
+  // Step 4: the optional visible "your results are in" push, for due
+  // users who turned it on (profiles.notify_results — set client-side
+  // right after granting notification permission, see
+  // app/(app)/onboarding-health.tsx). Every due user here already had
+  // their league(s) recomputed above, whether or not the push itself
+  // succeeds or they even have a token registered.
+  let resultsPushesSent = 0;
+  const { data: optedInProfiles, error: optedInError } = await supabase
+    .from('profiles')
+    .select('id')
+    .in('id', dueUserIds)
+    .eq('notify_results', true);
+  if (optedInError) {
+    console.error(`notify_results lookup: ${optedInError.message}`);
+  } else {
+    const optedInIds = ((optedInProfiles ?? []) as { id: string }[]).map((r) => r.id);
+    for (const idChunk of chunk(optedInIds, 500)) {
+      const { data: tokenRows, error: tokenError } = await supabase
+        .from('push_tokens')
+        .select('token')
+        .in('user_id', idChunk);
+      if (tokenError) {
+        console.error(`push_tokens (results): ${tokenError.message}`);
+        continue;
+      }
+      const messages: PushMessage[] = ((tokenRows ?? []) as { token: string }[]).map((r) => ({
+        to: r.token,
+        title: "Tonight's results are in",
+        body: 'Open Step League to see how your leagues shook out today.',
+        sound: 'default',
+        priority: 'high',
+        data: { type: 'results-ready' },
+      }));
+      await sendExpoPushMessages(messages);
+      resultsPushesSent += messages.length;
+    }
+  }
+
   return new Response(
     JSON.stringify({
+      presyncPushesSent,
       dueUsers: dueUserIds.length,
       leaguesConsidered: leaguesToProcess.size,
       processedLeagues: processedLeagueIds.size,
+      resultsPushesSent,
     }),
     { headers: { 'content-type': 'application/json' } }
   );

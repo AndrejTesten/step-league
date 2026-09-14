@@ -1095,7 +1095,7 @@ create trigger profiles_enforce_color_theme
 -- then, flip it manually for testing via the Supabase SQL editor:
 -- update public.profiles set is_pro = true where id = '<uuid>';
 revoke update on public.profiles from authenticated, anon;
-grant update (city, country, daily_goal, color_theme, avatar_url) on public.profiles to authenticated;
+grant update (city, country, daily_goal, color_theme, avatar_url, notify_results) on public.profiles to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- refresh_my_timezone() — lets a signed-in user update their own timezone
@@ -1414,3 +1414,70 @@ as $$
 $$;
 
 grant execute on function public.get_due_profile_ids(timestamptz) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- get_presync_due_profile_ids — same idea as get_due_profile_ids, but for
+-- the 30 minutes *before* 22:00 local (21:30-21:59) rather than the 22:00
+-- window itself. This is what makes a day's steps show up for league-mates
+-- at 22:00 even if the person who walked them never opens the app that
+-- day: nightly-rollup sends each of these profiles a silent push (see that
+-- function) that wakes the app just long enough to sync, so the real steps
+-- are already in daily_steps by the time 22:00 actually arrives and this
+-- same person's row (or a league-mate's, if they cross 22:00 first) gets
+-- picked up by get_due_profile_ids for the real rollup. A 30-minute
+-- window, not 15, on purpose: it spans two 15-minute cron ticks, so a
+-- single dropped/delayed push still gets a second attempt before 22:00.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_presync_due_profile_ids(p_now timestamptz default now())
+returns table (id uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id
+  from public.profiles p
+  where extract(hour from (p_now at time zone coalesce(p.timezone, 'UTC')))::int = 21
+    and extract(minute from (p_now at time zone coalesce(p.timezone, 'UTC')))::int >= 30;
+$$;
+
+grant execute on function public.get_presync_due_profile_ids(timestamptz) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- push_tokens — one row per device (a user can have more than one: a
+-- second phone, or a reinstall that generated a fresh token without the
+-- old one ever being cleaned up). Primary-keyed on the token itself so a
+-- device re-registering just updates its own row.
+--
+-- Used for two things, both sent by nightly-rollup with the service_role
+-- key: a silent wake-and-sync push ~30 minutes before this person's local
+-- 22:00 (see get_presync_due_profile_ids above — this is the fix for "my
+-- league-mates should see my steps at 22:00 even if I never open the app
+-- that day"), and, for anyone with profiles.notify_results on, a visible
+-- "your results are in" push right at their own 22:00.
+-- ---------------------------------------------------------------------------
+create table if not exists public.push_tokens (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  token text primary key,
+  platform text not null check (platform in ('ios', 'android')),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.push_tokens enable row level security;
+
+drop policy if exists "users manage their own push tokens" on public.push_tokens;
+create policy "users manage their own push tokens"
+  on public.push_tokens for all
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+create index if not exists push_tokens_user_id_idx on public.push_tokens (user_id);
+
+-- Whether to send the visible "results are in" push at 22:00, on top of
+-- the always-on silent sync push above. Set once, client-side, right after
+-- notification permission is granted during onboarding (see
+-- app/(app)/onboarding-health.tsx) — there's no separate opt-in screen for
+-- it since by that point permission has already been granted for the sync
+-- push to work at all.
+alter table public.profiles add column if not exists notify_results boolean not null default false;

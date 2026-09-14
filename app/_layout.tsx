@@ -16,6 +16,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SessionProvider, useSession } from '@/lib/auth-context';
 import { I18nProvider } from '@/lib/i18n';
+import '@/lib/push-notifications'; // side effect only: registers the background-sync task early enough to survive a headless launch — see that file's own header comment
 import { initSentry, Sentry } from '@/lib/sentry';
 import { StepsConsentProvider } from '@/lib/steps-consent';
 import { ThemeProvider } from '@/lib/theme';

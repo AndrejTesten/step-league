@@ -87,6 +87,12 @@
           "photosPermission": "Step League can save a league's final results card to your photos.",
           "savePhotosPermission": "Step League can save a league's final results card to your photos."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ccff33"
+        }
       ]
     ],
     "experiments": {

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Avatar, Screen, SectionLabel } from '@/components/ui';
+import { Avatar, Button, Screen, SectionLabel } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
 import { DEFAULT_DAILY_GOAL, KCAL_PER_STEP, METERS_PER_STEP, STEPS_PER_MINUTE } from '@/lib/equivalences';
 import { getLeaderboard, listMyLeagues } from '@/lib/leagues';
+import { getNotificationStatus, type NotificationStatus } from '@/lib/push-notifications';
 import { getStepStatsAndMap } from '@/lib/stats';
 import { dateKeyInTimezone } from '@/lib/steps-shared';
 import { useSyncStatus } from '@/lib/sync-status';
@@ -103,6 +104,16 @@ export function StepCounterPage({ width }: { width: number }) {
     }, [load])
   );
 
+  // Re-checked every time this screen regains focus — including right
+  // after coming back from the OS Settings app, so fixing it there is
+  // reflected immediately without needing a full app restart.
+  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      getNotificationStatus().then(setNotificationStatus);
+    }, [])
+  );
+
   // useStepSync (see lib/use-step-sync.ts) re-pulls from HealthKit/Health
   // Connect into daily_steps on mount, on foreground-return, and every 15s
   // — and reports every attempt (success or failure) through lastSyncAt.
@@ -178,6 +189,15 @@ export function StepCounterPage({ width }: { width: number }) {
         <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small, marginBottom: theme.space(2) }}>
           {t(`home.stepCounter.syncErrors.${syncStatus.errorCode}`)}
         </Text>
+      )}
+
+      {(notificationStatus === 'denied' || notificationStatus === 'undetermined') && (
+        <View style={[styles.notificationWarning, { borderColor: colors.danger, backgroundColor: colors.card }]}>
+          <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodySemiBold, fontSize: 12.5, lineHeight: 18 }}>
+            {t('home.stepCounter.notificationsOff')}
+          </Text>
+          <Button label={t('common.openSettings')} variant="secondary" onPress={() => Linking.openSettings()} />
+        </View>
       )}
 
       <Pressable onPress={() => router.push('/stats')}>
@@ -278,6 +298,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: theme.space(4),
+  },
+  notificationWarning: {
+    borderWidth: theme.border,
+    borderRadius: theme.radius.md,
+    padding: theme.space(3.5),
+    gap: theme.space(2.5),
+    marginBottom: theme.space(3),
   },
   coffeeButton: {
     borderWidth: theme.border,

@@ -9,7 +9,8 @@
     "tryAgain": "Try again",
     "close": "Close",
     "you": "You",
-    "noMatches": "No matches."
+    "noMatches": "No matches.",
+    "openSettings": "Open Settings"
   },
   "app": {
     "error": {
@@ -90,8 +91,19 @@
     },
     "notifications": {
       "label": "Notifications",
-      "resultsOnly": "Results only"
+      "on": "On",
+      "off": "Off",
+      "warning": "Turn notifications on so your steps sync automatically — otherwise your league standings may be wrong on days you don't open the app."
     },
+    "batteryOptimization": {
+      "label": "Battery optimization",
+      "explain": "Find Step League in the list and choose \"Don't optimize\" — otherwise Android may stop background sync from running."
+    },
+    "backgroundRefresh": {
+      "label": "Background App Refresh",
+      "explain": "Make sure it's on for Step League in Settings — otherwise iOS may delay background sync. Also avoid fully closing the app from the app switcher, which stops it from syncing in the background at all."
+    },
+    "checkInSettings": "Check in Settings",
     "premium": {
       "active": "Premium active",
       "priceArrow": "€1.99/mo →",
@@ -144,6 +156,7 @@
         "permission_denied": "Steps permission was denied. Open Health Connect → App permissions → StepLeague and allow Steps.",
         "unknown": "Steps aren't syncing right now. We'll keep trying."
       },
+      "notificationsOff": "Notifications are off. Your steps may not reach your leagues on days you don't open the app.",
       "todayLabel": "Today · {{date}}",
       "steps": "Steps",
       "goalPct": "{{percent}}% of {{goal}}",
@@ -381,6 +394,10 @@
           "title": "Who sees it",
           "body": "Only the leagues you join, and only after 22:00."
         },
+        "backgroundSync": {
+          "title": "Background sync",
+          "body": "A quiet notification wakes the app briefly around 22:00 so your steps reach your leagues even if you don't open the app that day."
+        },
         "whatWeNeverTouch": {
           "title": "What we never touch",
           "body": "Location, routes, heart rate, workouts, or anything else in Health. No ads, no third parties, no data sold."
@@ -388,10 +405,16 @@
       },
       "agreeLabel": "I agree to Step League reading my daily step count.",
       "privacyNoteLink": "Privacy note · ~210 words, plain language.",
-      "notifyOptIn": "Also send me one notification at 22:00 when scores land. Optional, asked separately later.",
+      "notificationsRequired": {
+        "label": "I allow Step League to send notifications so my steps can sync in the background.",
+        "warning": "Required — without this, your league standings may be wrong on days you don't open the app."
+      },
+      "errors": {
+        "notificationsDenied": "Notifications were denied. Step League needs this to keep your league standings accurate — enable notifications in Settings and try again."
+      },
       "footnote": "Your phone will ask next. You can say no there, or change it any time in Profile.",
       "privacyNoteTitle": "Privacy note",
-      "privacyNoteBody": "Step League reads one number from your phone's health data: your total step count for each day. That's it: not your location, your routes, your heart rate, your workouts, or anything else Health/Health Connect tracks.\n\nThat daily total is written to our database (Supabase) tied to your account, so it can be compared against the other members of leagues you choose to join. Standings only ever show yesterday's total and earlier. Today's count stays private to you until the 22:00 rollup, every day, without exception.\n\nWe don't run ads, and we don't have an analytics or advertising SDK that reads this data. We don't sell it, license it, or share it with any third party. It isn't used to train any model. The only people who can ever see your step totals are the other members of leagues you've personally joined, and only for days that have already locked in.\n\nIf you leave a league, your past totals stay visible in that league's history the same way everyone else's do. Leaving doesn't retroactively hide already-locked standings. You can revoke step access at any time from your phone's Health/Health Connect settings, or stop syncing from Step League's own Profile screen. Deleting your account deletes your step history along with it.\n\nOne developer runs this app and reads this note the same way you're reading it now: plainly, and meaning every word."
+      "privacyNoteBody": "Step League reads one number from your phone's health data: your total step count for each day. That's it: not your location, your routes, your heart rate, your workouts, or anything else Health/Health Connect tracks.\n\nThat daily total is written to our database (Supabase) tied to your account, so it can be compared against the other members of leagues you choose to join. Standings only ever show yesterday's total and earlier. Today's count stays private to you until the 22:00 rollup, every day, without exception.\n\nStep League also asks for notification permission. This isn't for marketing — it exists so the app can wake itself briefly around 22:00 and sync your steps even on a day you never open it, so your league-mates still see accurate standings. That wake-up uses a silent, content-free push; nothing is shown unless you've also chosen to be told when your results are in. Your device's push token is stored tied to your account for this one purpose and is never used for anything else.\n\nWe don't run ads, and we don't have an analytics or advertising SDK that reads this data. We don't sell it, license it, or share it with any third party. It isn't used to train any model. The only people who can ever see your step totals are the other members of leagues you've personally joined, and only for days that have already locked in.\n\nIf you leave a league, your past totals stay visible in that league's history the same way everyone else's do. Leaving doesn't retroactively hide already-locked standings. You can revoke step access at any time from your phone's Health/Health Connect settings, revoke notifications from your phone's system settings, or stop syncing from Step League's own Profile screen. Deleting your account deletes your step history along with it.\n\nOne developer runs this app and reads this note the same way you're reading it now: plainly, and meaning every word."
     }
   },
   "premium": {

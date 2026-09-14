@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppMark } from '@/components/AuthExtras';
 import { Button, Screen, Sheet } from '@/components/ui';
+import { useSession } from '@/lib/auth-context';
+import { getNotificationStatus, requestAndRegisterPushNotifications } from '@/lib/push-notifications';
 import { useStepsConsent } from '@/lib/steps-consent';
 import { theme, useThemeColors } from '@/lib/theme';
 
-const READ_ROW_KEYS = ['whatWeRead', 'whoSeesIt', 'whatWeNeverTouch'] as const;
-const READ_ROW_OK = [true, true, false];
+const READ_ROW_KEYS = ['whatWeRead', 'whoSeesIt', 'backgroundSync', 'whatWeNeverTouch'] as const;
+const READ_ROW_OK = [true, true, true, false];
 
 /**
  * "Step access — in-app consent" (design screen 2u) — shown once, after
@@ -19,15 +21,25 @@ const READ_ROW_OK = [true, true, false];
  * app/(app)/_layout.tsx and the `enabled` gate on useStepSync). Google Play
  * and Apple both expect a plain-language explanation like this ahead of a
  * sensitive-permission prompt, not just the bare OS dialog.
+ *
+ * Notification permission is requested here too, and is NOT optional the
+ * way it used to be: without it there's no way to wake the app for a
+ * background sync (see lib/push-notifications.ts), which means a day
+ * someone doesn't open the app is a day their league-mates don't see their
+ * real steps at 22:00. Denying it here is a hard stop, not a skippable
+ * checkbox — see handleContinue.
  */
 export default function OnboardingHealth() {
   const { t } = useTranslation();
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
+  const { session } = useSession();
   const { setConsentGiven } = useStepsConsent();
   const [agreed, setAgreed] = useState(false);
-  const [notifyOptIn, setNotifyOptIn] = useState(false);
+  const [notificationsAgreed, setNotificationsAgreed] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   const READ_ROWS = READ_ROW_KEYS.map((key, i) => ({
     ok: READ_ROW_OK[i],
@@ -35,10 +47,32 @@ export default function OnboardingHealth() {
     body: t(`onboarding.health.readRows.${key}.body`),
   }));
 
-  function handleContinue() {
-    if (!agreed) return;
-    setConsentGiven(true, notifyOptIn);
-    router.replace('/');
+  async function handleContinue() {
+    if (!agreed || !notificationsAgreed || !session) return;
+    setNotificationError(null);
+    setRegistering(true);
+    try {
+      const granted = await requestAndRegisterPushNotifications(session.user.id);
+      if (!granted) {
+        const status = await getNotificationStatus();
+        if (status === 'denied') {
+          // The OS permission itself was refused — this is the one case
+          // that has to actually block continuing, since without it
+          // there's no way to fix background sync later short of the user
+          // finding Settings on their own. Everything else (offline right
+          // now, a simulator with no real push capability) is treated as
+          // "fix it later" — the home-screen status banner keeps flagging
+          // it until it's resolved, but doesn't trap onboarding over a
+          // transient environmental issue.
+          setNotificationError(t('onboarding.health.errors.notificationsDenied'));
+          return;
+        }
+      }
+      setConsentGiven(true, true);
+      router.replace('/');
+    } finally {
+      setRegistering(false);
+    }
   }
 
   return (
@@ -85,18 +119,36 @@ export default function OnboardingHealth() {
           </Text>
         </Pressable>
 
-        <Pressable onPress={() => setNotifyOptIn((v) => !v)} style={[styles.checkboxRow, { marginTop: theme.space(3) }]} hitSlop={6}>
-          <View style={[styles.checkbox, { borderColor: colors.controlBorder }, notifyOptIn && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
-            {notifyOptIn && <Text style={[styles.checkGlyph, { color: colors.primaryText }]}>✓</Text>}
+        <Pressable onPress={() => setNotificationsAgreed((v) => !v)} style={[styles.checkboxRow, { marginTop: theme.space(3) }]} hitSlop={6}>
+          <View style={[styles.checkbox, { borderColor: colors.controlBorder }, notificationsAgreed && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+            {notificationsAgreed && <Text style={[styles.checkGlyph, { color: colors.primaryText }]}>✓</Text>}
           </View>
-          <Text style={[styles.checkboxLabel, { color: colors.textMuted }]}>
-            {t('onboarding.health.notifyOptIn')}
+          <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+            {t('onboarding.health.notificationsRequired.label')}
           </Text>
         </Pressable>
+        <Text style={{ marginTop: theme.space(1.5), fontSize: 11.5, lineHeight: 16, fontFamily: theme.fontFamily.bodyMedium, color: colors.danger }}>
+          {t('onboarding.health.notificationsRequired.warning')}
+        </Text>
+
+        {notificationError && (
+          <View style={{ marginTop: theme.space(3), gap: theme.space(2) }}>
+            <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small }}>
+              {notificationError}
+            </Text>
+            <Button label={t('common.openSettings')} variant="secondary" onPress={() => Linking.openSettings()} />
+          </View>
+        )}
       </ScrollView>
 
       <View style={{ paddingHorizontal: theme.space(4.5), paddingBottom: insets.bottom + theme.space(3), gap: theme.space(2.5) }}>
-        <Button label={t('common.continue')} onPress={handleContinue} disabled={!agreed} arrow />
+        <Button
+          label={t('common.continue')}
+          onPress={handleContinue}
+          disabled={!agreed || !notificationsAgreed}
+          loading={registering}
+          arrow
+        />
         <Text style={[styles.footnote, { color: colors.textDim }]}>
           {t('onboarding.health.footnote')}
         </Text>

@@ -9,7 +9,8 @@
     "tryAgain": "Erneut versuchen",
     "close": "Schließen",
     "you": "Du",
-    "noMatches": "Keine Treffer."
+    "noMatches": "Keine Treffer.",
+    "openSettings": "Einstellungen öffnen"
   },
   "app": {
     "error": {
@@ -90,8 +91,19 @@
     },
     "notifications": {
       "label": "Benachrichtigungen",
-      "resultsOnly": "Nur Ergebnisse"
+      "on": "An",
+      "off": "Aus",
+      "warning": "Schalte Benachrichtigungen ein, damit deine Schritte automatisch synchronisiert werden — sonst könnten deine Liga-Ergebnisse an Tagen falsch sein, an denen du die App nicht öffnest."
     },
+    "batteryOptimization": {
+      "label": "Akkuoptimierung",
+      "explain": "Suche Step League in der Liste und wähle \"Nicht optimieren\" — sonst kann Android die Hintergrundsynchronisierung stoppen."
+    },
+    "backgroundRefresh": {
+      "label": "Hintergrundaktualisierung",
+      "explain": "Stelle sicher, dass sie für Step League in den Einstellungen aktiviert ist — sonst kann iOS die Hintergrundsynchronisierung verzögern. Schließe die App auch nicht vollständig über den App-Wechsler, das stoppt die Hintergrundsynchronisierung komplett."
+    },
+    "checkInSettings": "In den Einstellungen prüfen",
     "premium": {
       "active": "Premium aktiv",
       "priceArrow": "1,99 €/Monat →",
@@ -144,6 +156,7 @@
         "permission_denied": "Die Schritte-Berechtigung wurde verweigert. Öffne Health Connect → App-Berechtigungen → StepLeague und erlaube Schritte.",
         "unknown": "Schritte werden gerade nicht synchronisiert. Wir versuchen es weiter."
       },
+      "notificationsOff": "Benachrichtigungen sind aus. Deine Schritte erreichen deine Ligen möglicherweise nicht an Tagen, an denen du die App nicht öffnest.",
       "todayLabel": "Heute · {{date}}",
       "steps": "Schritte",
       "goalPct": "{{percent}}% von {{goal}}",
@@ -381,6 +394,10 @@
           "title": "Wer es sieht",
           "body": "Nur die Ligen, denen du beitrittst, und erst nach 22:00 Uhr."
         },
+        "backgroundSync": {
+          "title": "Hintergrundsynchronisierung",
+          "body": "Eine stille Benachrichtigung weckt die App kurz gegen 22:00 Uhr, damit deine Schritte deine Ligen erreichen, auch wenn du die App an diesem Tag nicht öffnest."
+        },
         "whatWeNeverTouch": {
           "title": "Was wir nie anfassen",
           "body": "Standort, Routen, Herzfrequenz, Workouts oder sonst irgendwas in Health. Keine Werbung, keine Drittanbieter, keine verkauften Daten."
@@ -388,10 +405,16 @@
       },
       "agreeLabel": "Ich bin einverstanden, dass Step League meine tägliche Schrittzahl liest.",
       "privacyNoteLink": "Datenschutzhinweis · ~210 Wörter, klare Sprache.",
-      "notifyOptIn": "Schick mir auch eine Benachrichtigung um 22:00 Uhr, wenn die Ergebnisse da sind. Optional, wird später separat gefragt.",
+      "notificationsRequired": {
+        "label": "Ich erlaube Step League, Benachrichtigungen zu senden, damit meine Schritte im Hintergrund synchronisiert werden können.",
+        "warning": "Erforderlich — ohne dies könnten deine Liga-Ergebnisse an Tagen falsch sein, an denen du die App nicht öffnest."
+      },
+      "errors": {
+        "notificationsDenied": "Benachrichtigungen wurden abgelehnt. Step League braucht das, um deine Liga-Ergebnisse korrekt zu halten — aktiviere Benachrichtigungen in den Einstellungen und versuche es erneut."
+      },
       "footnote": "Dein Handy fragt gleich nach. Du kannst dort Nein sagen oder es später jederzeit im Profil ändern.",
       "privacyNoteTitle": "Datenschutzhinweis",
-      "privacyNoteBody": "Step League liest eine einzige Zahl aus den Gesundheitsdaten deines Handys: deine tägliche Gesamtschrittzahl. Das war's: nicht deinen Standort, deine Routen, deine Herzfrequenz, deine Workouts oder sonst etwas, was Health/Health Connect erfasst.\n\nDiese Tageszahl wird mit deinem Konto verknüpft in unserer Datenbank (Supabase) gespeichert, damit sie mit den anderen Mitgliedern der Ligen verglichen werden kann, denen du beitrittst. In den Tabellen ist immer nur der Stand von gestern und früher zu sehen. Die heutige Zahl bleibt bis zum 22:00-Uhr-Update jeden Tag ohne Ausnahme privat für dich allein.\n\nWir schalten keine Werbung und haben kein Analyse- oder Werbe-SDK, das diese Daten ausliest. Wir verkaufen sie nicht, lizenzieren sie nicht und geben sie an keine Dritten weiter. Sie werden für kein Modell zum Training genutzt. Deine Schrittzahlen können nur die anderen Mitglieder der Ligen sehen, denen du persönlich beigetreten bist, und auch nur für Tage, die schon abgeschlossen sind.\n\nWenn du eine Liga verlässt, bleiben deine bisherigen Ergebnisse in der Ligahistorie sichtbar, genau wie bei allen anderen. Das Verlassen blendet bereits abgeschlossene Platzierungen nicht rückwirkend aus. Du kannst den Schrittzugriff jederzeit in den Health/Health-Connect-Einstellungen deines Handys widerrufen oder die Synchronisation im Profil von Step League selbst stoppen. Löschst du dein Konto, wird auch deine Schritt-Historie gelöscht.\n\nEine einzelne Entwicklerin bzw. ein einzelner Entwickler betreibt diese App und liest diesen Hinweis genauso, wie du ihn gerade liest: ganz normal, und jedes Wort ist ernst gemeint."
+      "privacyNoteBody": "Step League liest eine einzige Zahl aus den Gesundheitsdaten deines Handys: deine tägliche Gesamtschrittzahl. Das war's: nicht deinen Standort, deine Routen, deine Herzfrequenz, deine Workouts oder sonst etwas, was Health/Health Connect erfasst.\n\nDiese Tageszahl wird mit deinem Konto verknüpft in unserer Datenbank (Supabase) gespeichert, damit sie mit den anderen Mitgliedern der Ligen verglichen werden kann, denen du beitrittst. In den Tabellen ist immer nur der Stand von gestern und früher zu sehen. Die heutige Zahl bleibt bis zum 22:00-Uhr-Update jeden Tag ohne Ausnahme privat für dich allein.\n\nStep League bittet außerdem um die Erlaubnis für Benachrichtigungen. Das ist keine Werbung — damit kann die App sich gegen 22:00 Uhr kurz selbst wecken und deine Schritte synchronisieren, auch an einem Tag, an dem du sie nie öffnest, damit deine Liga-Mitglieder trotzdem korrekte Ergebnisse sehen. Dieses Aufwecken nutzt eine stille, inhaltslose Push-Nachricht; es wird nichts angezeigt, außer du hast zusätzlich gewählt, benachrichtigt zu werden, wenn deine Ergebnisse da sind. Der Push-Token deines Geräts wird mit deinem Konto verknüpft nur für diesen einen Zweck gespeichert und nie für etwas anderes verwendet.\n\nWir schalten keine Werbung und haben kein Analyse- oder Werbe-SDK, das diese Daten ausliest. Wir verkaufen sie nicht, lizenzieren sie nicht und geben sie an keine Dritten weiter. Sie werden für kein Modell zum Training genutzt. Deine Schrittzahlen können nur die anderen Mitglieder der Ligen sehen, denen du persönlich beigetreten bist, und auch nur für Tage, die schon abgeschlossen sind.\n\nWenn du eine Liga verlässt, bleiben deine bisherigen Ergebnisse in der Ligahistorie sichtbar, genau wie bei allen anderen. Das Verlassen blendet bereits abgeschlossene Platzierungen nicht rückwirkend aus. Du kannst den Schrittzugriff jederzeit in den Health/Health-Connect-Einstellungen deines Handys widerrufen, Benachrichtigungen in den Systemeinstellungen deines Handys widerrufen oder die Synchronisation im Profil von Step League selbst stoppen. Löschst du dein Konto, wird auch deine Schritt-Historie gelöscht.\n\nEine einzelne Entwicklerin bzw. ein einzelner Entwickler betreibt diese App und liest diesen Hinweis genauso, wie du ihn gerade liest: ganz normal, und jedes Wort ist ernst gemeint."
     }
   },
   "premium": {
