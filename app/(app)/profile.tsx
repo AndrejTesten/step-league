@@ -15,6 +15,7 @@ import { getMyTotalWins, listMyLeagues } from '@/lib/leagues';
 import { getStepStats } from '@/lib/stats';
 import { supabase } from '@/lib/supabase';
 import { theme, useThemeColors, useThemeMode, type ThemeMode } from '@/lib/theme';
+import { getDeviceTimezone, refreshTimezone } from '@/lib/timezone';
 import type { StepStats } from '@/lib/types';
 
 const EMPTY_STATS: StepStats = { today: 0, month: 0, year: 0, allTime: 0, bestDay: 0, daysLogged: 0, streak: 0 };
@@ -42,6 +43,8 @@ export default function Profile() {
   const [stats, setStats] = useState<StepStats>(EMPTY_STATS);
   const [leagueCount, setLeagueCount] = useState(0);
   const [wins, setWins] = useState(0);
+  const [timezoneSaving, setTimezoneSaving] = useState(false);
+  const [timezoneError, setTimezoneError] = useState<string | null>(null);
 
   useEffect(() => {
     setCity(profile?.city ?? '');
@@ -153,6 +156,22 @@ export default function Profile() {
     }
   }
 
+  const deviceTimezone = getDeviceTimezone();
+  const timezoneMismatch = !!profile?.timezone && profile.timezone !== deviceTimezone;
+
+  async function handleRefreshTimezone() {
+    setTimezoneError(null);
+    setTimezoneSaving(true);
+    try {
+      await refreshTimezone(deviceTimezone);
+      await refreshProfile();
+    } catch (e) {
+      setTimezoneError(getErrorMessage(e, t('profile.timezone.errors.refresh')));
+    } finally {
+      setTimezoneSaving(false);
+    }
+  }
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Screen>
@@ -240,6 +259,30 @@ export default function Profile() {
             22:00 <Text style={{ color: colors.textDim, fontSize: 11 }}>{t('profile.scoreUpdate.local')}</Text>
           </Text>
         </View>
+        <View style={[styles.settingRow, { borderTopColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}>
+          <SectionLabel>{t('profile.timezone.label')}</SectionLabel>
+          <Text style={{ fontSize: 13, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }} numberOfLines={1}>
+            {profile?.timezone ?? '—'}
+          </Text>
+        </View>
+        {timezoneMismatch && (
+          <View style={{ paddingVertical: theme.space(3), gap: theme.space(2) }}>
+            <Text style={{ fontSize: 12, lineHeight: 17, fontFamily: theme.fontFamily.bodyMedium, color: colors.textSubtle }}>
+              {t('profile.timezone.mismatch', { timezone: deviceTimezone })}
+            </Text>
+            <Button
+              label={t('profile.timezone.refresh')}
+              onPress={handleRefreshTimezone}
+              loading={timezoneSaving}
+              variant="secondary"
+            />
+            {timezoneError && (
+              <Text style={{ color: colors.danger, fontFamily: theme.fontFamily.bodyMedium, fontSize: theme.font.small }}>
+                {timezoneError}
+              </Text>
+            )}
+          </View>
+        )}
         <View style={[styles.settingRow, { borderTopColor: colors.border, borderBottomWidth: theme.border, borderBottomColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}>
           <SectionLabel>{t('profile.notifications.label')}</SectionLabel>
           <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>{t('profile.notifications.resultsOnly')}</Text>

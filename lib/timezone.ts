@@ -1,18 +1,32 @@
 import * as Localization from 'expo-localization';
 
+import { supabase } from './supabase';
+
 /**
  * Best-effort IANA timezone for this device (e.g. "Europe/Ljubljana").
- * Captured once at sign-up and stored on the profile so the nightly rollup
+ * Captured at sign-up and stored on the profile so the nightly rollup
  * function (which runs server-side, with no concept of "local time" on its
- * own) knows when 22:00 actually is for this specific user.
- *
- * Users who travel won't get this re-detected automatically in v1 — that's
- * a reasonable cut for a first release. Add a "refresh timezone" action in
- * Settings later if it matters to your users.
+ * own) knows when 22:00 actually is for this specific user. Also what
+ * refreshTimezone() below compares the stored value against.
  */
 export function getDeviceTimezone(): string {
   const calendars = Localization.getCalendars();
   return calendars[0]?.timeZone ?? 'UTC';
+}
+
+/**
+ * Updates the signed-in user's stored timezone to whatever the device
+ * currently reports — for the Profile screen's "your timezone looks like
+ * it changed" prompt (someone who's traveled). Goes through the
+ * refresh_my_timezone() RPC (see supabase/schema.sql) rather than a plain
+ * profiles update: timezone drives league day-boundaries and isn't a
+ * client-writable column for that reason, and the RPC also rate-limits how
+ * often this can happen. Existing daily_steps rows are never touched —
+ * only which zone future syncs/rollups use for this person changes.
+ */
+export async function refreshTimezone(timezone: string): Promise<void> {
+  const { error } = await supabase.rpc('refresh_my_timezone', { p_timezone: timezone });
+  if (error) throw new Error(error.message);
 }
 
 /**

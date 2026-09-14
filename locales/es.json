@@ -80,6 +80,14 @@
       "label": "Actualización de puntuación",
       "local": "hora local"
     },
+    "timezone": {
+      "label": "Zona horaria",
+      "mismatch": "Tu zona horaria parece haber cambiado a {{timezone}}. Actualízala para que los días de tu liga coincidan correctamente.",
+      "refresh": "Actualizar zona horaria",
+      "errors": {
+        "refresh": "No se pudo actualizar tu zona horaria."
+      }
+    },
     "notifications": {
       "label": "Notificaciones",
       "resultsOnly": "Solo resultados"

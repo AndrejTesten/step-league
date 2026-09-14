@@ -80,6 +80,14 @@
       "label": "Ergebnis-Update",
       "local": "Ortszeit"
     },
+    "timezone": {
+      "label": "Zeitzone",
+      "mismatch": "Deine Zeitzone scheint sich zu {{timezone}} geändert zu haben. Aktualisiere sie, damit deine Liga-Tage richtig stimmen.",
+      "refresh": "Zeitzone aktualisieren",
+      "errors": {
+        "refresh": "Zeitzone konnte nicht aktualisiert werden."
+      }
+    },
     "notifications": {
       "label": "Benachrichtigungen",
       "resultsOnly": "Nur Ergebnisse"

@@ -80,6 +80,14 @@
       "label": "Score update",
       "local": "local"
     },
+    "timezone": {
+      "label": "Timezone",
+      "mismatch": "Your timezone looks like it's changed to {{timezone}}. Update it so your league days line up correctly.",
+      "refresh": "Update timezone",
+      "errors": {
+        "refresh": "Could not update your timezone."
+      }
+    },
     "notifications": {
       "label": "Notifications",
       "resultsOnly": "Results only"

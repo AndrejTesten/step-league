@@ -80,6 +80,14 @@
       "label": "Mise à jour du score",
       "local": "heure locale"
     },
+    "timezone": {
+      "label": "Fuseau horaire",
+      "mismatch": "Ton fuseau horaire semble avoir changé pour {{timezone}}. Mets-le à jour pour que les jours de ta ligue soient corrects.",
+      "refresh": "Mettre à jour le fuseau horaire",
+      "errors": {
+        "refresh": "Impossible de mettre à jour ton fuseau horaire."
+      }
+    },
     "notifications": {
       "label": "Notifications",
       "resultsOnly": "Résultats seulement"

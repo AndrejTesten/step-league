@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { useSession } from './auth-context';
+import { getDaysToBackfill, recordFullSyncNow } from './steps-shared';
 import { syncSteps } from './steps'; // Metro resolves steps.ios.ts / steps.android.ts / steps.web.ts
 
 // While the app is open and in the foreground, re-pull from
@@ -58,13 +59,22 @@ export function useStepSync(enabled: boolean) {
     // an older, smaller count finishing last and overwriting a newer one in
     // daily_steps, which is what made the counter look inaccurate.
     let syncing = false;
+    // undefined = a "full" sync (mount / foreground-return): backfill
+    // however many days it's actually been, not a fixed window — see
+    // getDaysToBackfill(). A number = the live poll's fixed, cheap value
+    // (0, today only).
     const doSync = async (daysToBackfill?: number) => {
       if (syncing) return;
       syncing = true;
       try {
         const s = sessionRef.current;
         const p = profileRef.current;
-        if (s && p) await syncSteps(p.timezone, daysToBackfill);
+        if (s && p) {
+          const isFullSync = daysToBackfill === undefined;
+          const days = isFullSync ? await getDaysToBackfill() : daysToBackfill;
+          await syncSteps(p.timezone, days);
+          if (isFullSync) await recordFullSyncNow();
+        }
       } finally {
         syncing = false;
       }

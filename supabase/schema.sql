@@ -257,6 +257,8 @@ set search_path = public
 as $$
 declare
   v_delta bigint;
+  v_changed_date date;
+  v_league_id uuid;
 begin
   -- 120 calls per rolling 10 minutes — the client syncs roughly every 15s
   -- while foregrounded (~40 calls/10min steady state), so this leaves
@@ -278,6 +280,18 @@ begin
   select (e->>'date')::date, (e->>'steps')::integer
   from jsonb_array_elements(p_entries) as e;
 
+  -- Dates whose stored value is genuinely about to increase — captured
+  -- against the true "before" value, ahead of the upsert below overwriting
+  -- it. Feeds the snapshot-correction loop at the end: on a normal sync
+  -- (today, already-current value) this is empty and that loop is a no-op;
+  -- it only has rows after a backfill actually raises a past day's total.
+  create temporary table if not exists tmp_changed_dates (date date primary key) on commit drop;
+  insert into tmp_changed_dates (date)
+  select t.date
+  from tmp_step_entries t
+  left join public.daily_steps ds on ds.user_id = auth.uid() and ds.date = t.date
+  where t.steps > coalesce(ds.steps, 0);
+
   select coalesce(sum(greatest(coalesce(ds.steps, 0), t.steps) - coalesce(ds.steps, 0)), 0)
   into v_delta
   from tmp_step_entries t
@@ -293,16 +307,32 @@ begin
   if v_delta <> 0 then
     update public.profiles set lifetime_steps = lifetime_steps + v_delta where id = auth.uid();
   end if;
+
+  -- Late-arriving data (see recompute_snapshot_for_date() below for the
+  -- full story) can land on a date whose leaderboard_snapshots row is
+  -- already locked in, for any league this person is in. Correct those —
+  -- recompute_snapshot_for_date() itself no-ops for a league/date that was
+  -- never snapshotted, so this only ever does real work for dates that
+  -- actually need it.
+  for v_changed_date in select date from tmp_changed_dates loop
+    for v_league_id in select league_id from public.league_members where user_id = auth.uid() loop
+      perform public.recompute_snapshot_for_date(v_league_id, v_changed_date);
+    end loop;
+  end loop;
 end;
 $$;
 
 grant execute on function public.upsert_daily_steps_monotonic(jsonb) to authenticated;
 
 -- ---------------------------------------------------------------------------
--- leaderboard_snapshots — written only by the nightly rollup Edge Function
--- (using the service_role key, which bypasses RLS entirely). No insert
--- policy for regular users is defined on purpose: the standings are only
--- ever official once the server has computed them.
+-- leaderboard_snapshots — a row only ever gets *created* by the nightly
+-- rollup Edge Function (service_role, bypasses RLS entirely): standings
+-- become official only once the server has computed them for that day. An
+-- existing row can later be *corrected* by recompute_snapshot_for_date()
+-- below (SECURITY DEFINER, also bypasses RLS) when late-arriving daily_steps
+-- data changes a day that's already locked in — see that function and
+-- upsert_daily_steps_monotonic() for why. No insert/update policy for
+-- regular users either way: nothing here is ever client-writable directly.
 -- ---------------------------------------------------------------------------
 create table if not exists public.leaderboard_snapshots (
   league_id uuid not null references public.leagues (id) on delete cascade,
@@ -326,6 +356,80 @@ create policy "members can view league snapshots"
       where lm.league_id = leaderboard_snapshots.league_id and lm.user_id = auth.uid()
     )
   );
+
+-- ---------------------------------------------------------------------------
+-- recompute_snapshot_for_date — corrects one league's already-locked
+-- snapshot for one specific past date, mirroring nightly-rollup's own
+-- per-league total/rank logic (same join-date/round-start bounding) but
+-- scoped to a single date instead of "today".
+--
+-- Why this exists: steps only sync when the app is opened (see
+-- lib/use-step-sync.ts — there's no true background sync). Someone who
+-- doesn't open the app for a few days still has real steps recorded by
+-- HealthKit/Health Connect the whole time; the next time they do open it,
+-- upsert_daily_steps_monotonic() backfills those days into daily_steps —
+-- but by then, nightly-rollup may have already written and locked in a
+-- leaderboard_snapshots row for one or more of those dates, computed
+-- without that person's real steps for that day. Without this, that day's
+-- standings (and, for a daily_wins-scoring league, potentially the winner
+-- credited for that day) would stay wrong forever even after the real step
+-- count catches up.
+--
+-- Deliberately update-only: it must NEVER insert a snapshot row that
+-- doesn't already exist. A date without a snapshot yet hasn't had its
+-- league's local 22:00 pass for anyone — inserting one here would leak
+-- unofficial "today" standings early, breaking the whole "results lock in
+-- at 22:00" mechanic. See the exists-check up front.
+-- ---------------------------------------------------------------------------
+create or replace function public.recompute_snapshot_for_date(p_league_id uuid, p_date date)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_round_start date;
+begin
+  if not exists (
+    select 1 from public.leaderboard_snapshots
+    where league_id = p_league_id and snapshot_date = p_date
+  ) then
+    return;
+  end if;
+
+  select coalesce(current_round_start, created_at::date) into v_round_start
+  from public.leagues where id = p_league_id;
+  if v_round_start is null or p_date < v_round_start then
+    return;
+  end if;
+
+  with members as (
+    select
+      lm.user_id,
+      greatest(v_round_start, (lm.joined_at at time zone coalesce(p.timezone, 'UTC'))::date) as effective_start
+    from public.league_members lm
+    join public.profiles p on p.id = lm.user_id
+    where lm.league_id = p_league_id
+  ),
+  totals as (
+    select m.user_id, coalesce(sum(ds.steps), 0) as total_steps
+    from members m
+    left join public.daily_steps ds
+      on ds.user_id = m.user_id
+      and ds.date >= m.effective_start
+      and ds.date <= p_date
+    group by m.user_id
+  ),
+  ranked as (
+    select user_id, total_steps, rank() over (order by total_steps desc) as rank
+    from totals
+  )
+  update public.leaderboard_snapshots s
+  set total_steps = r.total_steps, rank = r.rank
+  from ranked r
+  where s.league_id = p_league_id and s.snapshot_date = p_date and s.user_id = r.user_id;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Invite codes: short, unambiguous (no 0/O/1/I), auto-generated on insert.
@@ -982,7 +1086,8 @@ create trigger profiles_enforce_color_theme
 -- way to actually carve out one column is to revoke the table-wide privilege
 -- entirely and re-grant UPDATE on an explicit allow-list of the columns the
 -- app's UI actually lets a user edit — leaving is_pro (and username,
--- display_name, timezone, created_at) off that list.
+-- display_name, created_at) off that list. timezone is off it too, but for
+-- a different reason — see refresh_my_timezone() just below.
 --
 -- The service_role key — used only by Edge Functions / a verified-purchase
 -- webhook, never shipped to the app — bypasses grants entirely, so that
@@ -991,6 +1096,47 @@ create trigger profiles_enforce_color_theme
 -- update public.profiles set is_pro = true where id = '<uuid>';
 revoke update on public.profiles from authenticated, anon;
 grant update (city, country, daily_goal, color_theme, avatar_url) on public.profiles to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- refresh_my_timezone() — lets a signed-in user update their own timezone
+-- through one controlled path, instead of adding it to the plain column
+-- allow-list above. timezone drives which calendar day a step gets
+-- attributed to and when *this person's* leagues lock in at 22:00 — a
+-- free-text column a client could set to anything, as often as it liked,
+-- would be a way to game exactly that (e.g. hopping to a timezone whose
+-- 22:00 hasn't happened yet to buy more time on a given day). This
+-- validates the value is a real IANA zone and rate-limits how often it can
+-- change; check_rate_limit() itself already scopes limits to auth.uid().
+--
+-- Existing daily_steps rows are never touched — they stay attributed to
+-- whatever calendar date they were recorded under at the time, the same
+-- "historical facts, never rewritten" rule restart_league() already
+-- follows for old rounds. Only which zone *future* syncs and rollups use
+-- for this person changes. A league with members across timezones already
+-- works today regardless of any of this — nightly-rollup recomputes the
+-- whole league whenever any one member's local 22:00 passes, using each
+-- member's own timezone for their own totals (see that function's header).
+-- ---------------------------------------------------------------------------
+create or replace function public.refresh_my_timezone(p_timezone text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from pg_timezone_names where name = p_timezone) then
+    raise exception 'Not a real timezone: %', p_timezone;
+  end if;
+
+  if not public.check_rate_limit('refresh_timezone', 3, 86400) then
+    raise exception 'Too many timezone changes — try again later.';
+  end if;
+
+  update public.profiles set timezone = p_timezone where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.refresh_my_timezone(text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- peek_usage — one row per (user, local day), counting how many times

@@ -80,6 +80,14 @@
       "label": "Aggiornamento punteggio",
       "local": "ora locale"
     },
+    "timezone": {
+      "label": "Fuso orario",
+      "mismatch": "Il tuo fuso orario sembra essere cambiato in {{timezone}}. Aggiornalo per allineare correttamente i giorni della tua lega.",
+      "refresh": "Aggiorna fuso orario",
+      "errors": {
+        "refresh": "Impossibile aggiornare il fuso orario."
+      }
+    },
     "notifications": {
       "label": "Notifiche",
       "resultsOnly": "Solo risultati"
