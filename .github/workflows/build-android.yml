@@ -1,0 +1,84 @@
+name: Build Android APK
+
+# Builds a debug-signed Android APK straight from a plain GitHub Actions
+# runner (no EAS Build, no Docker image needed — Node/JDK/Android SDK are
+# all set up fresh via actions below) and uploads it as a downloadable
+# workflow artifact. Debug-signed, not a Play Store release build: the
+# point is "install this on my phone to test," not distribution.
+#
+# One-time setup before this can run: add two repo secrets under
+# Settings -> Secrets and variables -> Actions -> New repository secret
+#   EXPO_PUBLIC_SUPABASE_URL
+#   EXPO_PUBLIC_SUPABASE_ANON_KEY
+# (same values as your local .env — the anon key is safe to expose in a
+# client build, same as it already is inside the app bundle itself; see
+# .env.example).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .env
+        run: |
+          echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}" >> .env
+          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}" >> .env
+
+      - name: Prebuild native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Make gradlew executable
+        working-directory: android
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        working-directory: android
+        env:
+          # Same fix as the EAS build profiles (see eas.json) — without
+          # this, the Sentry Gradle plugin tries to upload release source
+          # maps via sentry-cli and fails the whole build since no real
+          # Sentry project/token is configured yet.
+          SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: step-league-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
