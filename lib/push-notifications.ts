@@ -34,12 +34,14 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// This is the actual fix for "my league-mates should see my steps at
-// 22:00 even if I never open the app that day": nightly-rollup sends a
-// silent push ~30 minutes before this device's local 22:00 (see
-// get_presync_due_profile_ids in supabase/schema.sql), and this task is
-// what runs in response — a full backfill sync, the same one a normal app
-// open would trigger, just running headlessly instead.
+// This is the actual fix for "my league-mates should see my steps even if
+// I never open the app that day": nightly-rollup sends a silent push
+// ~30 minutes before one of this device's leagues resets (see
+// get_leagues_due_for_presync in supabase/schema.sql), and the same push
+// is sent on-demand when someone else in a shared league opens Peek (see
+// supabase/functions/peek-live-sync) — this task is what runs in response
+// to either one — a full backfill sync, the same one a normal app open
+// would trigger, just running headlessly instead.
 //
 // Defined at module scope, not inside a component, so it's registered the
 // instant this file is imported — including on a cold, headless launch

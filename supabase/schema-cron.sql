@@ -3,10 +3,13 @@
 -- (`supabase functions deploy nightly-rollup`) and setting its
 -- CRON_SECRET secret (`supabase secrets set CRON_SECRET=<random-string>`).
 --
--- Why every 15 minutes instead of once a day: league members can be in
--- different timezones, so "22:00" is a different UTC instant for each of
--- them — the function itself checks, on every run, which users just
--- crossed into their local 22:00-22:14 window (see index.ts).
+-- Why every 15 minutes instead of once a day: each league resets on its
+-- own fixed 24-hour cycle timestamped from when it was created
+-- (leagues.next_reset_at), not at some single shared instant — the
+-- function itself checks, on every run, which leagues' next_reset_at has
+-- just passed (see index.ts). Deliberately not tied to any wall-clock
+-- time or member's timezone, so leagues created at different moments
+-- naturally reset at different times instead of clustering.
 
 -- Note: whatever you paste into the command below (service-role key,
 -- cron secret) is stored in plaintext in cron.job.command — visible to

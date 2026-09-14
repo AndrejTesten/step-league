@@ -164,11 +164,12 @@ async function getCurrentRoundStart(leagueId: string): Promise<{ roundStart: str
 /**
  * The leaderboard for a league right now.
  *
- * Official rank comes from last night's 22:00 snapshot (see
- * supabase/functions/nightly-rollup). Until the first snapshot exists — a
- * league is at most a few hours old — we fall back to summing daily_steps
- * directly so the screen isn't empty on day one. Either way we also show
- * each member's steps so far today, which haven't been counted yet.
+ * Official rank comes from the league's last reset snapshot (see
+ * supabase/functions/nightly-rollup and process_league_reset() in
+ * supabase/schema.sql). Until the first snapshot exists — a league is at
+ * most 24 hours old — we fall back to summing daily_steps directly so the
+ * screen isn't empty on day one. Either way we also show each member's
+ * steps so far today, which haven't been counted yet.
  */
 export async function getLeaderboard(leagueId: string): Promise<{
   rows: LeaderboardRow[];
@@ -276,11 +277,12 @@ export async function getLeaderboard(leagueId: string): Promise<{
     .map((m) => {
       const todaySteps = todayByUser.get(m.user_id) ?? 0;
       const yesterdaySteps = yesterdayByUser.get(m.user_id) ?? 0;
-      // Sealed once a snapshot exists: standings show exactly what the last
-      // 22:00 rollup wrote, nothing from today folded in. (This used to
+      // Sealed once a snapshot exists: standings show exactly what the
+      // last reset wrote, nothing from today folded in. (This used to
       // silently add today's live steps on top, which quietly contradicted
-      // every "today unlocks at 22:00" label in the UI — today's live totals
-      // are now only ever visible through Peek, see getLivePeek() below.)
+      // every "unlocks at next reset" label in the UI — today's live
+      // totals are now only ever visible through Peek, see getLivePeek()
+      // below.)
       const reactionMap = reactionsByUser.get(m.user_id);
       return {
         user_id: m.user_id,
@@ -344,8 +346,16 @@ function dayFractionElapsed(timezone: string): number {
  * answers "how am I doing right now" rather than duplicating the frozen
  * table. Consumed via usePeek() below, which enforces the daily quota
  * server-side before the caller bothers fetching this.
+ *
+ * `since`, when given, is the instant triggerLeagueLiveSync() fired the
+ * live-sync pushes for this peek — each row's is_fresh is then whether
+ * their daily_steps row for today has updated since that push went out
+ * (RLS already lets league-mates read each other's today's daily_steps —
+ * see "league-mates can view today's live steps" in supabase/schema.sql —
+ * so no extra RPC is needed to read updated_at here). Omit it to skip the
+ * freshness check entirely (every row comes back is_fresh: true).
  */
-export async function getLivePeek(leagueId: string): Promise<PeekResult> {
+export async function getLivePeek(leagueId: string, since?: string): Promise<PeekResult> {
   const { data: userData } = await supabase.auth.getUser();
   const myId = userData.user?.id;
 
@@ -364,20 +374,27 @@ export async function getLivePeek(leagueId: string): Promise<PeekResult> {
 
   const { data: stepsRows, error: stepsError } = await supabase
     .from('daily_steps')
-    .select('user_id, date, steps')
+    .select('user_id, date, steps, updated_at')
     .in('user_id', memberList.map((m) => m.user_id))
     .in('date', uniqueDates);
   if (stepsError) throw stepsError;
 
   const nowByUser = new Map<string, number>();
-  for (const row of (stepsRows ?? []) as { user_id: string; date: string; steps: number }[]) {
-    if (row.date === todayKeyByUser.get(row.user_id)) nowByUser.set(row.user_id, row.steps);
+  const updatedAtByUser = new Map<string, string>();
+  for (const row of (stepsRows ?? []) as { user_id: string; date: string; steps: number; updated_at: string }[]) {
+    if (row.date === todayKeyByUser.get(row.user_id)) {
+      nowByUser.set(row.user_id, row.steps);
+      updatedAtByUser.set(row.user_id, row.updated_at);
+    }
   }
+
+  const sinceMs = since ? new Date(since).getTime() : null;
 
   const rows = memberList
     .map((m) => {
       const now = nowByUser.get(m.user_id) ?? 0;
       const fraction = dayFractionElapsed(m.profiles?.timezone ?? 'UTC');
+      const updatedAt = updatedAtByUser.get(m.user_id);
       return {
         user_id: m.user_id,
         display_name: m.profiles?.display_name ?? 'Unknown',
@@ -389,6 +406,7 @@ export async function getLivePeek(leagueId: string): Promise<PeekResult> {
         // doesn't store other members' hourly data to do that.
         pace: Math.round(now / Math.max(fraction, 0.08)),
         is_me: m.user_id === myId,
+        is_fresh: sinceMs === null || m.user_id === myId || (!!updatedAt && new Date(updatedAt).getTime() >= sinceMs),
       };
     })
     .sort((a, b) => b.now_steps - a.now_steps);
@@ -398,6 +416,36 @@ export async function getLivePeek(leagueId: string): Promise<PeekResult> {
   const gapToFirst = me && leader && !leader.is_me ? leader.now_steps - me.now_steps : me && leader && leader.is_me ? 0 : null;
 
   return { rows, gapToFirst, leaderName: leader?.display_name ?? null };
+}
+
+/**
+ * Fires the moment someone opens Peek: silently wakes every *other* league
+ * member's phone (see supabase/functions/peek-live-sync) so their real
+ * steps land in daily_steps before getLivePeek() reads live standings a
+ * few seconds later. Returns the instant the pushes went out, to pass as
+ * `since` to getLivePeek() for the freshness check above. Best-effort —
+ * a failure here (offline, function cold-start hiccup) just means the
+ * peek falls back to whatever was already synced, same as before this
+ * existed, so callers can safely ignore a rejected promise.
+ */
+export async function triggerLeagueLiveSync(leagueId: string): Promise<{ triggeredAt: string }> {
+  const { data, error } = await supabase.functions.invoke('peek-live-sync', { body: { leagueId } });
+  if (error) throw error;
+  return { triggeredAt: (data as { triggeredAt: string }).triggeredAt };
+}
+
+/**
+ * Whether `nextResetAt` (a league's upcoming reset) is the last one before
+ * `deadline` — i.e. the round ends before this league would reset again.
+ * Pure client-side date math, no schema support needed: the UI uses this to
+ * show an exclamation-mark "last stretch" warning next to the countdown.
+ */
+export function isFinalResetBeforeDeadline(nextResetAt: string, deadline: string): boolean {
+  const afterNextResetMs = new Date(nextResetAt).getTime() + 24 * 60 * 60 * 1000;
+  // deadline is a date (YYYY-MM-DD); the league stays active through the
+  // end of that day, UTC.
+  const deadlineEndMs = new Date(`${deadline}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000;
+  return afterNextResetMs >= deadlineEndMs;
 }
 
 /** Consumes one of today's peek allowance (1 free / 3 premium) — see use_peek() in supabase/schema.sql. */
@@ -758,7 +806,7 @@ export async function sendLeagueMessage(leagueId: string, body: string): Promise
 }
 
 /**
- * A single day's result for the 22:00 takeover screen: each member's own
+ * A single day's result for the "scores are in" takeover screen: each member's own
  * step count for that specific day (from daily_steps — a real, meaningful
  * "how much did I walk today" number) ranked league-wide for the day's
  * winner, plus each member's *cumulative* standing rank that day vs. the day

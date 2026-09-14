@@ -5,11 +5,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui';
-import { getLivePeek, usePeek } from '@/lib/leagues';
+import { getLivePeek, triggerLeagueLiveSync, usePeek } from '@/lib/leagues';
 import { theme, useThemeColors } from '@/lib/theme';
 import type { PeekResult } from '@/lib/types';
 
 const PEEK_SECONDS = 10;
+// How long to give league-mates' phones to wake up and sync after the
+// live-sync push goes out, before actually reading standings. Short enough
+// to still leave most of the 10-second peek window for reading the result;
+// long enough for a typical push round-trip + a background sync to land.
+const LIVE_SYNC_WAIT_MS = 3000;
 
 /**
  * "Peek" (design screens 2p/2q) — a timed, silent look at today's live
@@ -17,6 +22,14 @@ const PEEK_SECONDS = 10;
  * premium, enforced server-side by use_peek()) the moment this screen
  * opens; if the quota's already spent, shows the upgrade sheet instead of
  * ever fetching live data.
+ *
+ * Also fires a live-sync push to every other league member the instant a
+ * peek is allowed (triggerLeagueLiveSync) — the whole point of "live" is
+ * that it reflects steps as of right now, not whatever last happened to
+ * sync on its own. A short wait gives those pushes a chance to land before
+ * getLivePeek() reads standings; anyone whose phone didn't wake in time
+ * still shows their last-known count, just flagged as not fresh (see
+ * PeekRow.is_fresh) instead of silently looking authoritative.
  */
 export default function Peek() {
   const { t } = useTranslation();
@@ -41,7 +54,13 @@ export default function Peek() {
           setState('denied');
           return;
         }
-        const live = await getLivePeek(id);
+        const { triggeredAt } = await triggerLeagueLiveSync(id).catch(() => ({ triggeredAt: undefined }));
+        if (cancelled) return;
+        if (triggeredAt) {
+          await new Promise((resolve) => setTimeout(resolve, LIVE_SYNC_WAIT_MS));
+          if (cancelled) return;
+        }
+        const live = await getLivePeek(id, triggeredAt);
         if (cancelled) return;
         setResult(live);
         setState('ready');
@@ -131,9 +150,16 @@ export default function Peek() {
           <Text style={[styles.rank, { color: r.is_me ? colors.accent : colors.text }]}>{i + 1}</Text>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.space(2.5) }}>
             <Avatar name={r.display_name} uri={r.avatar_url} size={26} variant={r.is_me ? 'accent' : 'default'} />
-            <Text style={[styles.name, { color: r.is_me ? colors.accent : colors.text }]} numberOfLines={1}>
-              {r.is_me ? t('common.you') : r.display_name}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.name, { color: r.is_me ? colors.accent : colors.text }]} numberOfLines={1}>
+                {r.is_me ? t('common.you') : r.display_name}
+              </Text>
+              {!r.is_fresh && (
+                <Text style={[styles.staleNote, { color: colors.textDim }]} numberOfLines={2}>
+                  {t('leagues.peek.stale', { name: r.display_name })}
+                </Text>
+              )}
+            </View>
           </View>
           <Text style={[styles.now, { color: r.is_me ? colors.accent : colors.text }]}>{r.now_steps.toLocaleString()}</Text>
           <Text style={[styles.pace, { color: r.is_me ? colors.accent : colors.textMuted }]}>{formatPace(r.pace)}</Text>
@@ -304,6 +330,12 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     fontSize: 14,
+    fontFamily: theme.fontFamily.bodyMedium,
+  },
+  staleNote: {
+    marginTop: 1,
+    fontSize: 10,
+    lineHeight: 13,
     fontFamily: theme.fontFamily.bodyMedium,
   },
   now: {

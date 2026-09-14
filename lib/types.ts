@@ -26,6 +26,8 @@ export type League = {
   deadline: string; // ISO date, end of the current round
   current_round_start: string | null; // null until the league's first restart
   round_number: number;
+  next_reset_at: string; // timestamptz — when this league's standings next lock in (a fixed 24h cycle from creation/restart, not tied to any member's timezone)
+  last_reset_at: string | null; // timestamptz — when this league's cycle last actually locked in; null until the first reset fires
   scoring_mode: LeagueScoringMode;
   is_public: boolean;
   /** Optional, freeform house-rule text — e.g. "Winner picks the next restaurant." Not enforced by the app. */
@@ -137,6 +139,15 @@ export type PeekRow = {
   now_steps: number;
   pace: number;
   is_me: boolean;
+  /**
+   * false when a live-sync push (see triggerLeagueLiveSync in lib/leagues.ts)
+   * was sent for this peek but this member's daily_steps row hasn't updated
+   * since — their phone likely didn't wake in time. now_steps still shows
+   * their last-known count; the UI adds a "couldn't reach their phone just
+   * now" note rather than hiding the number. Always true when no live sync
+   * was triggered (getLivePeek called without `since`).
+   */
+  is_fresh: boolean;
 };
 
 export type PeekResult = {

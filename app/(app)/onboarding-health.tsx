@@ -26,8 +26,8 @@ const READ_ROW_OK = [true, true, true, false];
  * way it used to be: without it there's no way to wake the app for a
  * background sync (see lib/push-notifications.ts), which means a day
  * someone doesn't open the app is a day their league-mates don't see their
- * real steps at 22:00. Denying it here is a hard stop, not a skippable
- * checkbox — see handleContinue.
+ * real steps when their league resets. Denying it here is a hard stop, not
+ * a skippable checkbox — see handleContinue.
  */
 export default function OnboardingHealth() {
   const { t } = useTranslation();

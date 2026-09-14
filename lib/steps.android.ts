@@ -17,12 +17,15 @@ import { startOfDayInTimezone } from './timezone';
  * upserts it into `daily_steps`. We only ever read Steps; no write
  * permission is requested.
  *
- * LIMITATION: this only runs when the app is opened (see the `useStepSync`
- * hook used by the (app) layout). Health Connect does support a background
- * read permission for always-on sync, but it needs its own Play Console
- * declaration and review — worth adding once this has real users, not
- * needed to ship v1. Tell users in onboarding to open the app once before
- * bed so tonight's steps are synced before the 22:00 rollup.
+ * LIMITATION: this only runs when the app is opened in the foreground, or
+ * woken headlessly by a silent push (see lib/push-notifications.ts) —
+ * there's no continuous background poll. Health Connect does support a
+ * background read permission for always-on sync, but it needs its own Play
+ * Console declaration and review — worth adding once this has real users,
+ * not needed to ship v1. The silent-push mechanism covers the common case
+ * today: nightly-rollup wakes the app ~30 minutes before a league resets,
+ * so steps are usually synced before it locks in without the user having
+ * to do anything.
  *
  * `daysToBackfill` defaults to a full week, but the frequent "live" poll
  * (see useStepSync) passes 0 to only touch today — each day here is a

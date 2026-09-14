@@ -18,12 +18,16 @@ function initStepCountRead(): Promise<void> {
  * into `daily_steps`. We only ever read StepCount; no write permission is
  * requested.
  *
- * LIMITATION: this only runs when the app is opened (see the `useStepSync`
- * hook used by the (app) layout). True background sync would need iOS
- * background fetch, which the OS throttles unreliably and won't run at a
- * guaranteed time — not worth the complexity for a v1. Tell users in
- * onboarding to open the app once before bed so tonight's steps are synced
- * before the 22:00 rollup.
+ * LIMITATION: this only runs when the app is opened in the foreground, or
+ * woken headlessly by a silent push (see lib/push-notifications.ts) — iOS
+ * background fetch on its own is throttled unreliably and won't run at a
+ * guaranteed time, so this app relies on silent push delivery instead
+ * (nightly-rollup wakes the app ~30 minutes before a league resets). That
+ * still isn't airtight on iOS — force-quitting the app from the app
+ * switcher suspends all background execution, silent pushes included,
+ * until it's reopened — which is why onboarding requires notification
+ * permission and Profile links to the Background App Refresh setting; see
+ * README's "Known limitations."
  *
  * `daysToBackfill` defaults to a full week; the frequent "live" poll (see
  * useStepSync) passes 0 to only re-fetch today, keeping the frequent path

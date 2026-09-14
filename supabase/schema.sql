@@ -9,9 +9,10 @@ create extension if not exists pgcrypto; -- gen_random_uuid()
 
 -- ---------------------------------------------------------------------------
 -- profiles — one row per auth.users row, created client-side right after
--- sign-up (see lib/auth-context.tsx). Stores the device's IANA timezone so
--- the nightly rollup function (which runs server-side with no local clock
--- of its own) knows when 22:00 actually is for this person.
+-- sign-up (see lib/auth-context.tsx). Stores the device's IANA timezone —
+-- used only for this person's own calendar-day boundaries (daily_steps
+-- date attribution, their step counter's "today"), not for league
+-- scoring; see process_league_reset() further down.
 -- ---------------------------------------------------------------------------
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -80,11 +81,34 @@ create table if not exists public.leagues (
   -- of their original join date.
   current_round_start date,
   round_number integer not null default 1,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- ---------------------------------------------------------------------
+  -- next_reset_at / last_reset_at — each league locks in standings on its
+  -- own fixed 24-hour cycle, timestamped from when it was created, instead
+  -- of every member's local 22:00. That used to mean leagues full of
+  -- people in similar timezones could all come due in the same few
+  -- minutes — a "thundering herd" that gets worse as the app grows — and
+  -- it made league scoring depend on profiles.timezone at all (still used
+  -- for a member's *personal* day boundaries, just not for this). See
+  -- process_league_reset() and get_leagues_due_for_reset() near the bottom
+  -- of this file for the mechanism, and restart_league() below, which
+  -- restarts this cycle from the moment of restart.
+  --
+  -- The `now()` in this default and the one on created_at above are the
+  -- same value within one insert statement, so a freshly created league's
+  -- next_reset_at is always exactly created_at + 24h.
+  -- ---------------------------------------------------------------------
+  next_reset_at timestamptz not null default (now() + interval '24 hours'),
+  last_reset_at timestamptz
 );
 
 alter table public.leagues add column if not exists current_round_start date;
 alter table public.leagues add column if not exists round_number integer not null default 1;
+alter table public.leagues add column if not exists next_reset_at timestamptz;
+alter table public.leagues add column if not exists last_reset_at timestamptz;
+update public.leagues set next_reset_at = now() + interval '24 hours' where next_reset_at is null;
+alter table public.leagues alter column next_reset_at set not null;
+alter table public.leagues alter column next_reset_at set default (now() + interval '24 hours');
 
 create table if not exists public.league_members (
   league_id uuid not null references public.leagues (id) on delete cascade,
@@ -154,6 +178,12 @@ as $$
     where league_id = p_league_id and user_id = p_user_id
   );
 $$;
+
+-- Also callable directly (not just from inside RLS policies) — the
+-- peek-live-sync Edge Function uses this, via the caller's own JWT, to
+-- confirm they're actually a member of the league before sending anyone a
+-- live-sync push (see supabase/functions/peek-live-sync).
+grant execute on function public.is_league_member(uuid, uuid) to authenticated;
 
 drop policy if exists "members can view fellow members" on public.league_members;
 create policy "members can view fellow members"
@@ -377,9 +407,9 @@ create policy "members can view league snapshots"
 --
 -- Deliberately update-only: it must NEVER insert a snapshot row that
 -- doesn't already exist. A date without a snapshot yet hasn't had its
--- league's local 22:00 pass for anyone — inserting one here would leak
--- unofficial "today" standings early, breaking the whole "results lock in
--- at 22:00" mechanic. See the exists-check up front.
+-- league's reset fire — inserting one here would leak unofficial "still
+-- live" standings early, breaking the whole "results lock in at reset"
+-- mechanic. See the exists-check up front.
 -- ---------------------------------------------------------------------------
 create or replace function public.recompute_snapshot_for_date(p_league_id uuid, p_date date)
 returns void
@@ -854,7 +884,11 @@ begin
       current_round_start = current_date,
       round_number = v_league.round_number + 1,
       winner_stakes = p_winner_stakes,
-      loser_stakes = p_loser_stakes
+      loser_stakes = p_loser_stakes,
+      -- The new round's 24h reset cycle starts fresh from this restart
+      -- moment, same as a brand-new league's does from its created_at.
+      next_reset_at = now() + interval '24 hours',
+      last_reset_at = null
   where id = p_league_id;
 
   if p_member_ids is not null then
@@ -1094,6 +1128,14 @@ create trigger profiles_enforce_color_theme
 -- remains the sole way to flip is_pro once real billing is wired up. Until
 -- then, flip it manually for testing via the Supabase SQL editor:
 -- update public.profiles set is_pro = true where id = '<uuid>';
+-- notify_results is added here (not just further down near push_tokens,
+-- where it's fully explained) because the grant below references it by
+-- name — granting column-level privileges on a column that doesn't exist
+-- yet fails outright, and this file has to work as a single top-to-bottom
+-- run on a fresh database. Safe to repeat; see push_tokens further down
+-- for what this column is actually for.
+alter table public.profiles add column if not exists notify_results boolean not null default false;
+
 revoke update on public.profiles from authenticated, anon;
 grant update (city, country, daily_goal, color_theme, avatar_url, notify_results) on public.profiles to authenticated;
 
@@ -1101,21 +1143,25 @@ grant update (city, country, daily_goal, color_theme, avatar_url, notify_results
 -- refresh_my_timezone() — lets a signed-in user update their own timezone
 -- through one controlled path, instead of adding it to the plain column
 -- allow-list above. timezone drives which calendar day a step gets
--- attributed to and when *this person's* leagues lock in at 22:00 — a
+-- attributed to for this person's *own* stats (step counter, streaks) — a
 -- free-text column a client could set to anything, as often as it liked,
--- would be a way to game exactly that (e.g. hopping to a timezone whose
--- 22:00 hasn't happened yet to buy more time on a given day). This
+-- would be a way to make a step silently jump between calendar days. This
 -- validates the value is a real IANA zone and rate-limits how often it can
 -- change; check_rate_limit() itself already scopes limits to auth.uid().
 --
 -- Existing daily_steps rows are never touched — they stay attributed to
 -- whatever calendar date they were recorded under at the time, the same
 -- "historical facts, never rewritten" rule restart_league() already
--- follows for old rounds. Only which zone *future* syncs and rollups use
--- for this person changes. A league with members across timezones already
--- works today regardless of any of this — nightly-rollup recomputes the
--- whole league whenever any one member's local 22:00 passes, using each
--- member's own timezone for their own totals (see that function's header).
+-- follows for old rounds. Only which zone *future* syncs use for this
+-- person changes.
+--
+-- League scoring itself no longer reads timezone at all — each league
+-- resets on its own fixed 24-hour cycle from leagues.next_reset_at,
+-- timestamped from creation, the same instant for every member regardless
+-- of where they are (see process_league_reset() near the end of this
+-- file). A league with members across timezones has always worked and
+-- still does; there's just no per-member timezone math involved in when
+-- it locks in anymore.
 -- ---------------------------------------------------------------------------
 create or replace function public.refresh_my_timezone(p_timezone text)
 returns void
@@ -1393,55 +1439,136 @@ create policy "users update their own reaction"
   with check (from_user_id = auth.uid() and public.check_rate_limit('react', 30, 3600));
 
 -- ---------------------------------------------------------------------------
--- get_due_profile_ids — used by the nightly-rollup Edge Function. Computes
--- "whose local time is currently 22:00-22:14" in SQL and returns just those
--- ids, instead of the function pulling every profile's (id, timezone) row
--- on every 15-minute tick only to throw almost all of them away in JS. At
--- 100k profiles that was 100k rows fetched 96 times a day for the ~1% of
--- rows actually due; this returns O(due users) rows instead.
+-- drop the old per-user-local-22:00 due-check functions — league resets no
+-- longer key off any member's timezone at all (see next_reset_at on
+-- leagues, above, and process_league_reset()/get_leagues_due_for_reset()
+-- below). Explicit drops so re-running this file against a database that
+-- still has the old versions actually removes them, instead of leaving
+-- dead functions nothing calls anymore.
 -- ---------------------------------------------------------------------------
-create or replace function public.get_due_profile_ids(p_now timestamptz default now())
+drop function if exists public.get_due_profile_ids(timestamptz);
+drop function if exists public.get_presync_due_profile_ids(timestamptz);
+
+-- ---------------------------------------------------------------------------
+-- process_league_reset(league_id) — the per-league equivalent of what the
+-- old per-user-22:00 rollup did: writes today's leaderboard_snapshots row
+-- for every member (mirrors recompute_snapshot_for_date()'s member/total/
+-- rank logic above, but inserts rather than only updating, since this is
+-- the row's first write for this cycle) and then advances the league's own
+-- next_reset_at by another 24 hours. Called once per due league — see
+-- get_leagues_due_for_reset() below — by nightly-rollup, which still runs
+-- every 15 minutes but now asks "which *leagues* are due" instead of
+-- "which *users* just hit 22:00 local."
+--
+-- A member's join date is bucketed in plain UTC here (not their own
+-- timezone, unlike the older functions) — the whole point of this
+-- redesign is that league scoring no longer depends on anyone's timezone.
+-- This can make a just-joined member's very first snapshot off by at most
+-- one calendar day versus the timezone-precise version; a one-time, one-day
+-- cosmetic difference for a brand new member, not an ongoing correctness
+-- issue.
+--
+-- Row-locks the league first and re-checks next_reset_at <= now() after
+-- acquiring the lock, so if two overlapping cron ticks both see the same
+-- league as due, only the first to acquire the lock actually processes it
+-- — the second sees the already-advanced next_reset_at and no-ops.
+-- ---------------------------------------------------------------------------
+create or replace function public.process_league_reset(p_league_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_league public.leagues;
+  v_round_start date;
+  v_snapshot_date date;
+begin
+  select * into v_league from public.leagues where id = p_league_id for update;
+  if v_league is null or v_league.next_reset_at > now() then
+    return;
+  end if;
+
+  v_round_start := coalesce(v_league.current_round_start, v_league.created_at::date);
+  v_snapshot_date := (v_league.next_reset_at at time zone 'utc')::date;
+
+  with members as (
+    select
+      lm.user_id,
+      greatest(v_round_start, (lm.joined_at at time zone 'utc')::date) as effective_start
+    from public.league_members lm
+    where lm.league_id = p_league_id
+  ),
+  totals as (
+    select m.user_id, coalesce(sum(ds.steps), 0) as total_steps
+    from members m
+    left join public.daily_steps ds
+      on ds.user_id = m.user_id
+      and ds.date >= m.effective_start
+      and ds.date <= current_date
+    group by m.user_id
+  ),
+  ranked as (
+    select user_id, total_steps, rank() over (order by total_steps desc) as rank
+    from totals
+  )
+  insert into public.leaderboard_snapshots (league_id, user_id, snapshot_date, total_steps, rank)
+  select p_league_id, user_id, v_snapshot_date, total_steps, rank from ranked
+  on conflict (league_id, user_id, snapshot_date) do update
+    set total_steps = excluded.total_steps, rank = excluded.rank;
+
+  update public.leagues
+  set next_reset_at = v_league.next_reset_at + interval '24 hours',
+      last_reset_at = now()
+  where id = p_league_id;
+end;
+$$;
+
+grant execute on function public.process_league_reset(uuid) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- get_leagues_due_for_reset — leagues whose next_reset_at has passed and
+-- are still active (deadline not yet reached). nightly-rollup calls
+-- process_league_reset() once per id this returns.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_leagues_due_for_reset(p_now timestamptz default now())
 returns table (id uuid)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select p.id
-  from public.profiles p
-  where extract(hour from (p_now at time zone coalesce(p.timezone, 'UTC')))::int = 22
-    and extract(minute from (p_now at time zone coalesce(p.timezone, 'UTC')))::int < 15;
+  select id from public.leagues
+  where next_reset_at <= p_now and deadline >= current_date;
 $$;
 
-grant execute on function public.get_due_profile_ids(timestamptz) to service_role;
+grant execute on function public.get_leagues_due_for_reset(timestamptz) to service_role;
 
 -- ---------------------------------------------------------------------------
--- get_presync_due_profile_ids — same idea as get_due_profile_ids, but for
--- the 30 minutes *before* 22:00 local (21:30-21:59) rather than the 22:00
--- window itself. This is what makes a day's steps show up for league-mates
--- at 22:00 even if the person who walked them never opens the app that
--- day: nightly-rollup sends each of these profiles a silent push (see that
--- function) that wakes the app just long enough to sync, so the real steps
--- are already in daily_steps by the time 22:00 actually arrives and this
--- same person's row (or a league-mate's, if they cross 22:00 first) gets
--- picked up by get_due_profile_ids for the real rollup. A 30-minute
+-- get_leagues_due_for_presync — leagues resetting in the next 0-30 minutes.
+-- This is what makes a day's steps show up for league-mates at reset time
+-- even if the person who walked them never opens the app: nightly-rollup
+-- sends every member of these leagues a silent push (see that function)
+-- that wakes the app just long enough to sync, so real steps are already
+-- in daily_steps by the time the reset actually happens. A 30-minute
 -- window, not 15, on purpose: it spans two 15-minute cron ticks, so a
--- single dropped/delayed push still gets a second attempt before 22:00.
+-- single dropped/delayed push still gets a second attempt before the
+-- reset fires.
 -- ---------------------------------------------------------------------------
-create or replace function public.get_presync_due_profile_ids(p_now timestamptz default now())
+create or replace function public.get_leagues_due_for_presync(p_now timestamptz default now())
 returns table (id uuid)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select p.id
-  from public.profiles p
-  where extract(hour from (p_now at time zone coalesce(p.timezone, 'UTC')))::int = 21
-    and extract(minute from (p_now at time zone coalesce(p.timezone, 'UTC')))::int >= 30;
+  select id from public.leagues
+  where next_reset_at > p_now
+    and next_reset_at <= p_now + interval '30 minutes'
+    and deadline >= current_date;
 $$;
 
-grant execute on function public.get_presync_due_profile_ids(timestamptz) to service_role;
+grant execute on function public.get_leagues_due_for_presync(timestamptz) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- push_tokens — one row per device (a user can have more than one: a
@@ -1449,12 +1576,15 @@ grant execute on function public.get_presync_due_profile_ids(timestamptz) to ser
 -- old one ever being cleaned up). Primary-keyed on the token itself so a
 -- device re-registering just updates its own row.
 --
--- Used for two things, both sent by nightly-rollup with the service_role
--- key: a silent wake-and-sync push ~30 minutes before this person's local
--- 22:00 (see get_presync_due_profile_ids above — this is the fix for "my
--- league-mates should see my steps at 22:00 even if I never open the app
--- that day"), and, for anyone with profiles.notify_results on, a visible
--- "your results are in" push right at their own 22:00.
+-- Used for three things: a silent wake-and-sync push ~30 minutes before
+-- one of a member's leagues resets (see get_leagues_due_for_presync above
+-- — the fix for "my league-mates should see my steps at reset time even if
+-- I never open the app that day"), sent by nightly-rollup with the
+-- service_role key; a visible "results are in" push right when a league
+-- actually resets, for members with profiles.notify_results on, also sent
+-- by nightly-rollup; and the same silent wake-and-sync push sent to every
+-- *other* league member the instant someone opens Peek, sent by the
+-- peek-live-sync Edge Function (see supabase/functions/peek-live-sync).
 -- ---------------------------------------------------------------------------
 create table if not exists public.push_tokens (
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -1474,10 +1604,11 @@ create policy "users manage their own push tokens"
 
 create index if not exists push_tokens_user_id_idx on public.push_tokens (user_id);
 
--- Whether to send the visible "results are in" push at 22:00, on top of
--- the always-on silent sync push above. Set once, client-side, right after
--- notification permission is granted during onboarding (see
+-- notify_results (added earlier in this file, near the profiles update
+-- grant that references it by name) is whether to send the visible
+-- "results are in" push when a league resets, on top of the always-on
+-- silent sync push above. Set once, client-side, right after notification
+-- permission is granted during onboarding (see
 -- app/(app)/onboarding-health.tsx) — there's no separate opt-in screen for
 -- it since by that point permission has already been granted for the sync
 -- push to work at all.
-alter table public.profiles add column if not exists notify_results boolean not null default false;

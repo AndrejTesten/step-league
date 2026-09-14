@@ -39,8 +39,9 @@ export function StepCounterPage({ width }: { width: number }) {
   const [last7, setLast7] = useState<{ dateKey: string; steps: number }[]>([]);
   const [rankInfo, setRankInfo] = useState<{ leagueName: string; rank: number } | null>(null);
   const [leagueCount, setLeagueCount] = useState(0);
+  const [soonestResetAt, setSoonestResetAt] = useState<string | null>(null);
   const syncStatus = useSyncStatus();
-  const clock = useCountdownClock(profile?.timezone);
+  const clock = useCountdownClock(soonestResetAt);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -75,6 +76,10 @@ export function StepCounterPage({ width }: { width: number }) {
       if (!mountedRef.current || requestId !== latestRequestId.current) return;
       setTotals(stats);
       setLeagueCount(myLeagues.length);
+      const activeResets = myLeagues
+        .filter((l) => new Date(l.deadline) >= new Date(new Date().toDateString()))
+        .map((l) => l.next_reset_at);
+      setSoonestResetAt(activeResets.length > 0 ? activeResets.sort()[0] : null);
 
       const today = dateKeyInTimezone(new Date(), timezone);
       const days: { dateKey: string; steps: number }[] = [];

@@ -4,9 +4,10 @@ import { supabase } from './supabase';
 
 /**
  * Best-effort IANA timezone for this device (e.g. "Europe/Ljubljana").
- * Captured at sign-up and stored on the profile so the nightly rollup
- * function (which runs server-side, with no concept of "local time" on its
- * own) knows when 22:00 actually is for this specific user. Also what
+ * Captured at sign-up and stored on the profile — used only for this
+ * person's own calendar-day boundaries (which daily_steps date a step
+ * lands on, the step counter's "today") now, not for league scoring; see
+ * process_league_reset() in supabase/schema.sql. Also what
  * refreshTimezone() below compares the stored value against.
  */
 export function getDeviceTimezone(): string {
@@ -27,39 +28,6 @@ export function getDeviceTimezone(): string {
 export async function refreshTimezone(timezone: string): Promise<void> {
   const { error } = await supabase.rpc('refresh_my_timezone', { p_timezone: timezone });
   if (error) throw new Error(error.message);
-}
-
-/**
- * Milliseconds until the next 22:00 in the given IANA timezone — i.e. until
- * the nightly rollup Edge Function next locks in standings for someone on
- * this timezone (see supabase/functions/nightly-rollup). Builds two Date
- * objects from the *same* wall-clock string parsed in the browser/device's
- * own local timezone; the absolute offset error that introduces cancels out
- * when we only take the difference between them, so this stays accurate
- * without pulling in a full timezone-math library.
- */
-export function msUntilNextRollup(timezone: string, now: Date = new Date()): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(now);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
-  const y = get('year');
-  const mo = get('month');
-  const d = get('day');
-  const localNow = new Date(`${y}-${mo}-${d}T${get('hour')}:${get('minute')}:${get('second')}`);
-
-  const target = new Date(`${y}-${mo}-${d}T22:00:00`);
-  if (target.getTime() <= localNow.getTime()) {
-    target.setDate(target.getDate() + 1);
-  }
-  return target.getTime() - localNow.getTime();
 }
 
 /**
@@ -116,7 +84,7 @@ export function formatCountdown(ms: number): string {
   return `${hours}h ${minutes}m`;
 }
 
-/** "3:41:08" — the design's hero countdown-to-22:00 clock, ticking every second. */
+/** "3:41:08" — the design's hero countdown-to-next-reset clock, ticking every second. */
 export function formatCountdownClock(ms: number): string {
   if (ms <= 0) return '0:00:00';
   const totalSeconds = Math.floor(ms / 1000);

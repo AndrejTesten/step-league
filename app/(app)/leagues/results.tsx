@@ -12,10 +12,12 @@ const INK = '#0b0c0a';
 const LIME = '#ccff33';
 
 /**
- * The 22:00 "Scores are in" takeover (design screen "2h") — shown once per
- * day, see the AsyncStorage-backed check in leagues/[id].tsx that navigates
- * here. Always full-lime regardless of light/dark mode, same as the design:
- * this is the app's one deliberate inversion, meant to stay rare and loud.
+ * The "Scores are in" takeover (design screen "2h") — shown once per league
+ * reset cycle, see the AsyncStorage-backed check in leagues/[id].tsx that
+ * navigates here. Always full-lime regardless of light/dark mode, same as
+ * the design: this is the app's one deliberate inversion, meant to stay
+ * rare and loud. No fixed clock time shown here anymore — each league locks
+ * in on its own 24h schedule now, not everyone's local 22:00.
  */
 export default function LeagueResults() {
   const { t, i18n } = useTranslation();
@@ -45,7 +47,7 @@ export default function LeagueResults() {
           <Text style={styles.eyebrow}>
             {dateLabel} · {name ?? ''}
           </Text>
-          <Text style={styles.clockNumber}>22:00</Text>
+          <Text style={styles.clockNumber}>✓</Text>
           <Text style={styles.title}>{t('leagues.results.scoresAreIn')}</Text>
         </View>
 

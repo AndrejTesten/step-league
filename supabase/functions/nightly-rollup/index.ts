@@ -1,87 +1,41 @@
 // Supabase Edge Function: nightly-rollup
 //
 // Deploy: supabase functions deploy nightly-rollup
-// Schedule: run this every 15 minutes via pg_cron + pg_net (see
-// supabase/schema-cron.sql), NOT once a day at a single fixed UTC time —
-// "22:00" means a different UTC instant for every member depending on
-// their own timezone, so this function has to check, every 15 minutes,
-// which users just hit 22:00 local time and only act on those.
+// Schedule: every 15 minutes via pg_cron + pg_net (see
+// supabase/schema-cron.sql). Despite the name (kept as-is so an existing
+// deployment/cron job doesn't need reconfiguring), this no longer runs
+// "nightly" at all — each league now resets on its own fixed 24-hour
+// cycle timestamped from when it was created (leagues.next_reset_at),
+// instead of every member's local 22:00.
+//
+// Why: clustering every reset around member-timezone-local-22:00 meant
+// leagues full of people in similar timezones could all come due in the
+// same few minutes — a "thundering herd" that gets worse as the app
+// grows. Spreading resets across each league's own creation moment
+// instead means the load is naturally spread out from day one, and league
+// scoring no longer reads profiles.timezone at all (still used for a
+// member's *personal* day boundaries — the step counter, streaks — just
+// not for this).
 //
 // What it does each run:
-//   1. Send a silent "sync now" push to anyone in their 21:30-21:59 local
-//      window (get_presync_due_profile_ids) — this is what makes a day's
-//      steps show up for league-mates at 22:00 even if that person never
-//      opens the app: the push wakes it just long enough to sync before
-//      the window below closes. See lib/push-notifications.ts for the
-//      client side that handles this push.
-//   2. Ask Postgres (get_due_profile_ids) which profiles are currently in
-//      the 22:00-22:14 local-time window ("due" users). This runs as SQL
-//      so only the due rows cross the wire, not every profile in the app.
-//   3. Find just the still-active leagues (deadline >= today) that have at
-//      least one due member, then fetch every member of *those* leagues
-//      (not every membership in the app) plus one batched daily_steps
-//      query covering all of them, and recompute each league's standings
-//      fresh, writing a new snapshot row per member.
-//   4. Send a visible "your results are in" push to due users who opted
-//      into profiles.notify_results.
-//
-// Recomputing the whole league (not just the due member) on every trigger
-// keeps ranks consistent even when a league's members span timezones —
-// whoever's 22:00 fires most recently effectively refreshes everyone's
-// rank using the best data available for each person at that moment.
-//
-// Each member's total only counts steps from their own join date onward
-// (in their own timezone) — matching the client-side fallback in
-// lib/leagues.ts — so joining an established league doesn't hand anyone a
-// lifetime step-count head start.
+//   1. Send a silent "sync now" push to every member of a league whose
+//      next_reset_at is 0-30 minutes away (get_leagues_due_for_presync) —
+//      the fix for "my league-mates should see my steps at reset time
+//      even if I never open the app that day." See
+//      lib/push-notifications.ts for the client side that handles this
+//      push.
+//   2. Ask Postgres (get_leagues_due_for_reset) which leagues are
+//      actually due (next_reset_at has passed) and still active, then
+//      call process_league_reset() once per league — it does the actual
+//      recompute-and-snapshot in SQL (mirrors recompute_snapshot_for_date's
+//      logic) and advances that league's next_reset_at by another 24
+//      hours.
+//   3. Send a visible "results are in" push, naming the league, to
+//      members of a just-processed league who opted into
+//      profiles.notify_results.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-
-function dateKeyInTimezone(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(date);
-}
-
-// Supabase's PostgREST .in() filter and the upsert payload both have
-// practical size limits; chunk large id/row lists instead of sending one
-// giant request that could time out or get rejected outright.
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
-
-// Expo's push API caps a single request at 100 messages, and has no auth
-// requirement for the volume this app is at (an EXPO_ACCESS_TOKEN secret
-// could be added later if that ever changes — see
-// https://docs.expo.dev/push-notifications/sending-notifications/).
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
-
-type PushMessage = {
-  to: string;
-  data?: Record<string, unknown>;
-  title?: string;
-  body?: string;
-  sound?: 'default' | null;
-  priority?: 'default' | 'normal' | 'high';
-  _contentAvailable?: boolean;
-};
-
-async function sendExpoPushMessages(messages: PushMessage[]): Promise<void> {
-  for (const batch of chunk(messages, 100)) {
-    try {
-      const res = await fetch(EXPO_PUSH_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify(batch),
-      });
-      if (!res.ok) {
-        console.error(`Expo push send failed: ${res.status} ${await res.text()}`);
-      }
-    } catch (err) {
-      console.error(`Expo push send threw: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-}
+import { chunk, sendExpoPushMessages, type PushMessage } from '../_shared/push.ts';
 
 Deno.serve(async (req) => {
   // Cheap shared-secret check so this endpoint can't be triggered by
@@ -103,231 +57,134 @@ Deno.serve(async (req) => {
   );
 
   const now = new Date();
-  const todayUtcKey = now.toISOString().slice(0, 10);
 
-  // Step 1: wake-and-sync push for anyone approaching their local 22:00 —
-  // see get_presync_due_profile_ids's own comment for why. Runs
-  // unconditionally, independent of whether anyone is *at* 22:00 this
-  // tick, so a failure here never blocks the actual rollup below.
+  // Step 1: wake-and-sync push for every member of a league resetting in
+  // the next 0-30 minutes — see get_leagues_due_for_presync's own comment
+  // for why. Runs unconditionally, independent of whether any league is
+  // actually *due* this tick, so a failure here never blocks step 2 below.
   let presyncPushesSent = 0;
-  const { data: presyncProfiles, error: presyncError } = await supabase.rpc('get_presync_due_profile_ids', {
+  const { data: presyncLeagues, error: presyncError } = await supabase.rpc('get_leagues_due_for_presync', {
     p_now: now.toISOString(),
   });
   if (presyncError) {
-    console.error(`get_presync_due_profile_ids: ${presyncError.message}`);
+    console.error(`get_leagues_due_for_presync: ${presyncError.message}`);
   } else {
-    const presyncUserIds = ((presyncProfiles ?? []) as { id: string }[]).map((r) => r.id);
-    for (const idChunk of chunk(presyncUserIds, 500)) {
-      const { data: tokenRows, error: tokenError } = await supabase
-        .from('push_tokens')
-        .select('token')
-        .in('user_id', idChunk);
-      if (tokenError) {
-        console.error(`push_tokens (presync): ${tokenError.message}`);
-        continue;
+    const presyncLeagueIds = ((presyncLeagues ?? []) as { id: string }[]).map((r) => r.id);
+    if (presyncLeagueIds.length > 0) {
+      const memberIds = new Set<string>();
+      for (const idChunk of chunk(presyncLeagueIds, 200)) {
+        const { data: memberRows, error: memberError } = await supabase
+          .from('league_members')
+          .select('user_id')
+          .in('league_id', idChunk);
+        if (memberError) {
+          console.error(`league_members (presync): ${memberError.message}`);
+          continue;
+        }
+        for (const row of (memberRows ?? []) as { user_id: string }[]) memberIds.add(row.user_id);
       }
-      const messages: PushMessage[] = ((tokenRows ?? []) as { token: string }[]).map((r) => ({
-        to: r.token,
-        data: { type: 'background-sync' },
-        priority: 'high',
-        _contentAvailable: true,
-        // No title/body/sound — a silent, data-only push. It should never
-        // show anything; it exists purely to wake the app's background
-        // handler (see lib/push-notifications.ts) so it can sync steps.
-      }));
-      await sendExpoPushMessages(messages);
-      presyncPushesSent += messages.length;
+      for (const idChunk of chunk(Array.from(memberIds), 500)) {
+        const { data: tokenRows, error: tokenError } = await supabase
+          .from('push_tokens')
+          .select('token')
+          .in('user_id', idChunk);
+        if (tokenError) {
+          console.error(`push_tokens (presync): ${tokenError.message}`);
+          continue;
+        }
+        const messages: PushMessage[] = ((tokenRows ?? []) as { token: string }[]).map((r) => ({
+          to: r.token,
+          data: { type: 'background-sync' },
+          priority: 'high',
+          _contentAvailable: true,
+          // No title/body/sound — a silent, data-only push. It should
+          // never show anything; it exists purely to wake the app's
+          // background handler (see lib/push-notifications.ts) so it can
+          // sync steps.
+        }));
+        await sendExpoPushMessages(messages);
+        presyncPushesSent += messages.length;
+      }
     }
   }
 
-  const { data: dueProfiles, error: dueError } = await supabase.rpc('get_due_profile_ids', {
+  // Step 2: process every league that's actually due.
+  const { data: dueLeagues, error: dueError } = await supabase.rpc('get_leagues_due_for_reset', {
     p_now: now.toISOString(),
   });
   if (dueError) {
-    return new Response(JSON.stringify({ error: dueError.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: dueError.message, presyncPushesSent }), { status: 500 });
   }
 
-  const dueUserIds = ((dueProfiles ?? []) as { id: string }[]).map((r) => r.id);
-  if (dueUserIds.length === 0) {
-    return new Response(JSON.stringify({ presyncPushesSent, dueUsers: 0, processedLeagues: 0 }), {
-      headers: { 'content-type': 'application/json' },
-    });
-  }
-
-  // Which still-active leagues have at least one due member? Scope every
-  // later query to just these leagues instead of the whole app's
-  // league_members table.
-  const leaguesToProcess = new Set<string>();
-  for (const idChunk of chunk(dueUserIds, 500)) {
-    const { data: dueMemberships, error: dueMembershipsError } = await supabase
-      .from('league_members')
-      .select('league_id, leagues!inner(deadline)')
-      .in('user_id', idChunk)
-      .gte('leagues.deadline', todayUtcKey);
-    if (dueMembershipsError) {
-      return new Response(JSON.stringify({ error: dueMembershipsError.message }), { status: 500 });
+  const dueLeagueIds = ((dueLeagues ?? []) as { id: string }[]).map((r) => r.id);
+  const processedLeagueIds: string[] = [];
+  for (const leagueId of dueLeagueIds) {
+    const { error: resetError } = await supabase.rpc('process_league_reset', { p_league_id: leagueId });
+    if (resetError) {
+      console.error(`process_league_reset(${leagueId}): ${resetError.message}`);
+      continue;
     }
-    for (const row of (dueMemberships ?? []) as { league_id: string }[]) {
-      leaguesToProcess.add(row.league_id);
-    }
+    processedLeagueIds.push(leagueId);
   }
 
-  if (leaguesToProcess.size === 0) {
+  if (processedLeagueIds.length === 0) {
     return new Response(
-      JSON.stringify({ presyncPushesSent, dueUsers: dueUserIds.length, processedLeagues: 0 }),
+      JSON.stringify({ presyncPushesSent, leaguesDue: dueLeagueIds.length, processedLeagues: 0, resultsPushesSent: 0 }),
       { headers: { 'content-type': 'application/json' } }
     );
   }
 
-  type MemberRow = {
-    league_id: string;
-    user_id: string;
-    joined_at: string;
-    profiles: { timezone: string };
-  };
+  // Step 3: the optional visible "results are in" push, per league just
+  // processed, for members who turned it on (profiles.notify_results —
+  // set client-side right after granting notification permission, see
+  // app/(app)/onboarding-health.tsx).
+  let resultsPushesSent = 0;
+  const { data: leagueRows, error: leagueNameError } = await supabase
+    .from('leagues')
+    .select('id, name')
+    .in('id', processedLeagueIds);
+  if (leagueNameError) console.error(`leagues (results push): ${leagueNameError.message}`);
+  const nameById = new Map(((leagueRows ?? []) as { id: string; name: string }[]).map((r) => [r.id, r.name]));
 
-  // Every member of every league that needs recomputing — not just the due
-  // ones, since a league's whole leaderboard is refreshed together.
-  const membersByLeague = new Map<string, MemberRow[]>();
-  for (const leagueIdChunk of chunk(Array.from(leaguesToProcess), 200)) {
+  for (const leagueId of processedLeagueIds) {
     const { data: memberRows, error: memberError } = await supabase
       .from('league_members')
-      .select('league_id, user_id, joined_at, profiles!inner(timezone)')
-      .in('league_id', leagueIdChunk);
+      .select('user_id, profiles!inner(notify_results)')
+      .eq('league_id', leagueId)
+      .eq('profiles.notify_results', true);
     if (memberError) {
-      return new Response(JSON.stringify({ error: memberError.message }), { status: 500 });
-    }
-    for (const row of (memberRows ?? []) as unknown as MemberRow[]) {
-      if (!membersByLeague.has(row.league_id)) membersByLeague.set(row.league_id, []);
-      membersByLeague.get(row.league_id)!.push(row);
-    }
-  }
-
-  // One batched daily_steps fetch covering every member of every league in
-  // scope, instead of a separate query per league.
-  const allMemberUserIds = Array.from(new Set(Array.from(membersByLeague.values()).flat().map((m) => m.user_id)));
-  const stepsByUser = new Map<string, { date: string; steps: number }[]>();
-  for (const idChunk of chunk(allMemberUserIds, 500)) {
-    const { data: stepsRows, error: stepsError } = await supabase
-      .from('daily_steps')
-      .select('user_id, date, steps')
-      .in('user_id', idChunk);
-    if (stepsError) {
-      return new Response(JSON.stringify({ error: stepsError.message }), { status: 500 });
-    }
-    for (const row of (stepsRows ?? []) as { user_id: string; date: string; steps: number }[]) {
-      if (!stepsByUser.has(row.user_id)) stepsByUser.set(row.user_id, []);
-      stepsByUser.get(row.user_id)!.push({ date: row.date, steps: row.steps });
-    }
-  }
-
-  type SnapshotRow = { league_id: string; user_id: string; snapshot_date: string; total_steps: number; rank: number };
-  const rowsByLeague = new Map<string, SnapshotRow[]>();
-
-  for (const [leagueId, members] of membersByLeague) {
-    const joinDateByUser = new Map(
-      members.map((m) => [m.user_id, dateKeyInTimezone(new Date(m.joined_at), m.profiles.timezone)])
-    );
-
-    const totals = new Map<string, number>();
-    for (const m of members) {
-      const joinDate = joinDateByUser.get(m.user_id);
-      const rows = stepsByUser.get(m.user_id) ?? [];
-      let total = 0;
-      for (const r of rows) {
-        if (joinDate && r.date < joinDate) continue; // before they joined
-        total += r.steps;
-      }
-      totals.set(m.user_id, total);
-    }
-
-    const ranked = members
-      .map((m) => ({ user_id: m.user_id, total_steps: totals.get(m.user_id) ?? 0 }))
-      .sort((a, b) => b.total_steps - a.total_steps)
-      .map((r, i) => ({ ...r, rank: i + 1 }));
-
-    rowsByLeague.set(
-      leagueId,
-      ranked.map((r) => ({
-        league_id: leagueId,
-        user_id: r.user_id,
-        snapshot_date: todayUtcKey,
-        total_steps: r.total_steps,
-        rank: r.rank,
-      }))
-    );
-  }
-
-  // Pack whole leagues into ~500-row upsert batches — never split one
-  // league's rows across two batches, so a batch failure can't leave a
-  // league's ranks half old / half new.
-  const batches: SnapshotRow[][] = [];
-  let current: SnapshotRow[] = [];
-  for (const rows of rowsByLeague.values()) {
-    if (current.length > 0 && current.length + rows.length > 500) {
-      batches.push(current);
-      current = [];
-    }
-    current.push(...rows);
-  }
-  if (current.length > 0) batches.push(current);
-
-  const processedLeagueIds = new Set<string>();
-  for (const rowChunk of batches) {
-    const { error: upsertError } = await supabase
-      .from('leaderboard_snapshots')
-      .upsert(rowChunk, { onConflict: 'league_id,user_id,snapshot_date' });
-    if (upsertError) {
-      console.error(`snapshot upsert: ${upsertError.message}`);
+      console.error(`league_members (results push, ${leagueId}): ${memberError.message}`);
       continue;
     }
-    for (const r of rowChunk) processedLeagueIds.add(r.league_id);
-  }
+    const optedInIds = ((memberRows ?? []) as { user_id: string }[]).map((r) => r.user_id);
+    if (optedInIds.length === 0) continue;
 
-  // Step 4: the optional visible "your results are in" push, for due
-  // users who turned it on (profiles.notify_results — set client-side
-  // right after granting notification permission, see
-  // app/(app)/onboarding-health.tsx). Every due user here already had
-  // their league(s) recomputed above, whether or not the push itself
-  // succeeds or they even have a token registered.
-  let resultsPushesSent = 0;
-  const { data: optedInProfiles, error: optedInError } = await supabase
-    .from('profiles')
-    .select('id')
-    .in('id', dueUserIds)
-    .eq('notify_results', true);
-  if (optedInError) {
-    console.error(`notify_results lookup: ${optedInError.message}`);
-  } else {
-    const optedInIds = ((optedInProfiles ?? []) as { id: string }[]).map((r) => r.id);
-    for (const idChunk of chunk(optedInIds, 500)) {
-      const { data: tokenRows, error: tokenError } = await supabase
-        .from('push_tokens')
-        .select('token')
-        .in('user_id', idChunk);
-      if (tokenError) {
-        console.error(`push_tokens (results): ${tokenError.message}`);
-        continue;
-      }
-      const messages: PushMessage[] = ((tokenRows ?? []) as { token: string }[]).map((r) => ({
-        to: r.token,
-        title: "Tonight's results are in",
-        body: 'Open Step League to see how your leagues shook out today.',
-        sound: 'default',
-        priority: 'high',
-        data: { type: 'results-ready' },
-      }));
-      await sendExpoPushMessages(messages);
-      resultsPushesSent += messages.length;
+    const { data: tokenRows, error: tokenError } = await supabase
+      .from('push_tokens')
+      .select('token')
+      .in('user_id', optedInIds);
+    if (tokenError) {
+      console.error(`push_tokens (results, ${leagueId}): ${tokenError.message}`);
+      continue;
     }
+    const leagueName = nameById.get(leagueId) ?? 'your league';
+    const messages: PushMessage[] = ((tokenRows ?? []) as { token: string }[]).map((r) => ({
+      to: r.token,
+      title: 'Results are in',
+      body: `${leagueName}'s standings just updated — open Step League to see where you land.`,
+      sound: 'default',
+      priority: 'high',
+      data: { type: 'results-ready' },
+    }));
+    await sendExpoPushMessages(messages);
+    resultsPushesSent += messages.length;
   }
 
   return new Response(
     JSON.stringify({
       presyncPushesSent,
-      dueUsers: dueUserIds.length,
-      leaguesConsidered: leaguesToProcess.size,
-      processedLeagues: processedLeagueIds.size,
+      leaguesDue: dueLeagueIds.length,
+      processedLeagues: processedLeagueIds.length,
       resultsPushesSent,
     }),
     { headers: { 'content-type': 'application/json' } }

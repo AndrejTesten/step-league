@@ -77,10 +77,6 @@
       "label": "Meta diaria",
       "save": "Guardar meta diaria"
     },
-    "scoreUpdate": {
-      "label": "Actualización de puntuación",
-      "local": "hora local"
-    },
     "timezone": {
       "label": "Zona horaria",
       "mismatch": "Tu zona horaria parece haber cambiado a {{timezone}}. Actualízala para que los días de tu liga coincidan correctamente.",
@@ -145,8 +141,9 @@
       "membersFinishedOn_other": "{{count}} miembros · terminó {{date}}",
       "youWon": "Ganaste",
       "sealedLeft": "Sellada · quedan {{time}}",
+      "finalStretch": "Recta final",
       "ofCount": "De {{count}}",
-      "footerNote": "Las tablas siempre muestran ayer. Las filas de hoy se desbloquean a las 22:00."
+      "footerNote": "Las tablas siempre muestran el último cierre registrado. Las filas nuevas se desbloquean cuando tu liga se reinicia."
     },
     "stepCounter": {
       "premium": "Premium",
@@ -262,7 +259,8 @@
       "loserHasTo": "El perdedor tiene que:",
       "showingDate": "Mostrando {{date}}",
       "liveSteps": "Pasos en vivo",
-      "unlocksAt2200": "Hoy se desbloquea a las 22:00",
+      "unlocksIn": "Se desbloquea en el próximo reinicio",
+      "finalStretch": "Recta final antes del plazo — ¡sal a caminar!",
       "loadingGraph": "Cargando gráfico…",
       "leagueScore": "Puntuación de la liga",
       "finalStandingsWinner": "Clasificación final · ganador",
@@ -326,7 +324,8 @@
       "deniedHeading": "Ese fue tu\nvistazo de hoy",
       "deniedBody": "La versión gratis te da un vistazo al día. Premium te da tres, suficiente para revisar en el almuerzo, después del trabajo y justo antes de que la tabla se cierre.",
       "getPremium": "Obtener Premium · 1,99 €/mes",
-      "waitFor2200": "Espera hasta las 22:00"
+      "waitFor2200": "Vuelve a intentarlo mañana",
+      "stale": "No pudimos obtener los pasos de {{name}} en este momento — se actualizarán en cuanto sea posible."
     },
     "results": {
       "scoresAreIn": "Ya están los resultados",

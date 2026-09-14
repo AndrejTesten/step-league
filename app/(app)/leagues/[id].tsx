@@ -10,7 +10,6 @@ import { LeagueScoreChart } from '@/components/LeagueScoreChart';
 import { Avatar, Button, Input, Screen, SectionLabel, Sheet, SheetOption, Tabs } from '@/components/ui';
 import { useSession } from '@/lib/auth-context';
 import { getErrorMessage } from '@/lib/errors';
-import { dateKeyInTimezone } from '@/lib/steps-shared';
 import {
   getLeaderboard,
   getLeagueAwards,
@@ -19,6 +18,7 @@ import {
   getLeagueScoreSeries,
   getMyNemesis,
   getReactionEmojis,
+  isFinalResetBeforeDeadline,
   leaveLeague,
   listMyLeagues,
   reactToMember,
@@ -53,11 +53,11 @@ export default function LeagueDetail() {
   const colors = useThemeColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { session, profile } = useSession();
-  const clock = useCountdownClock(profile?.timezone);
+  const { session } = useSession();
   const insets = useSafeAreaInsets();
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [league, setLeague] = useState<League | null>(null);
+  const clock = useCountdownClock(league?.next_reset_at);
   const [officialAsOf, setOfficialAsOf] = useState<string | null>(null);
   const [awards, setAwards] = useState<LeagueAward[] | null>(null);
   const [history, setHistory] = useState<LeagueRoundResult[]>([]);
@@ -161,14 +161,14 @@ export default function LeagueDetail() {
     };
   }, [id]);
 
-  // The 22:00 results takeover: shown once per league per day, the first
-  // time the user opens a league whose standings just locked in for today.
-  // "Just landed" means officialAsOf is today in the member's own timezone
-  // — otherwise every league visit on an old snapshot would pop it.
+  // The results takeover: shown once per league per reset cycle, the first
+  // time the user opens a league whose standings just locked in. "Just
+  // landed" means this officialAsOf value hasn't been shown yet for this
+  // league — tracked by comparing against the last one we saved, not by
+  // checking whether it matches "today" in any particular timezone, since
+  // a league's reset no longer lines up with anyone's local calendar day.
   useEffect(() => {
-    if (!id || !league || !officialAsOf || isLeagueEnded(league) || !profile?.timezone) return;
-    const today = dateKeyInTimezone(new Date(), profile.timezone);
-    if (officialAsOf !== today) return;
+    if (!id || !league || !officialAsOf || isLeagueEnded(league)) return;
     const storageKey = `stepleague:results-seen:${id}`;
     let cancelled = false;
     AsyncStorage.getItem(storageKey).then((seen) => {
@@ -179,7 +179,7 @@ export default function LeagueDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id, league, officialAsOf, profile?.timezone, router]);
+  }, [id, league, officialAsOf, router]);
 
   async function handleSendMessage() {
     if (!id || !messageDraft.trim()) return;
@@ -331,7 +331,7 @@ export default function LeagueDetail() {
         </View>
       )}
 
-      {!ended && (
+      {!ended && league && (
         <View style={[styles.countdownCard, { backgroundColor: colors.card, marginBottom: theme.space(4) }]}>
           <View style={{ flex: 1 }}>
             <SectionLabel>
@@ -339,7 +339,11 @@ export default function LeagueDetail() {
                 ? t('leagues.detail.showingDate', { date: new Date(officialAsOf).toLocaleDateString(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' }) })
                 : t('leagues.detail.liveSteps')}
             </SectionLabel>
-            <Text style={[styles.countdownCaption, { color: colors.textDim }]}>{t('leagues.detail.unlocksAt2200')}</Text>
+            <Text style={[styles.countdownCaption, { color: colors.textDim }]}>
+              {isFinalResetBeforeDeadline(league.next_reset_at, league.deadline)
+                ? `⚠ ${t('leagues.detail.finalStretch')}`
+                : t('leagues.detail.unlocksIn')}
+            </Text>
           </View>
           <Text style={[styles.countdownClock, { color: colors.accent, flexShrink: 0 }]}>{clock}</Text>
         </View>

@@ -265,12 +265,6 @@ export default function Profile() {
           </View>
         )}
         <View style={[styles.settingRow, { borderTopColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}>
-          <SectionLabel>{t('profile.scoreUpdate.label')}</SectionLabel>
-          <Text style={{ fontSize: 15, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }}>
-            22:00 <Text style={{ color: colors.textDim, fontSize: 11 }}>{t('profile.scoreUpdate.local')}</Text>
-          </Text>
-        </View>
-        <View style={[styles.settingRow, { borderTopColor: colors.border, justifyContent: 'space-between', alignItems: 'center' }]}>
           <SectionLabel>{t('profile.timezone.label')}</SectionLabel>
           <Text style={{ fontSize: 13, fontFamily: theme.fontFamily.bodyMedium, color: colors.text }} numberOfLines={1}>
             {profile?.timezone ?? '—'}

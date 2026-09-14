@@ -4,10 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Screen, SectionLabel, Title } from '@/components/ui';
-import { getLeaderboard, listMyLeagues } from '@/lib/leagues';
+import { getLeaderboard, isFinalResetBeforeDeadline, listMyLeagues } from '@/lib/leagues';
 import { theme, useThemeColors } from '@/lib/theme';
 import { useCountdownClock } from '@/lib/use-countdown-clock';
-import { useSession } from '@/lib/auth-context';
 import type { League } from '@/lib/types';
 
 type Row = League & { myRank: number | null; memberCount: number; ended: boolean; won: boolean };
@@ -16,12 +15,25 @@ function isLeagueEnded(league: League): boolean {
   return new Date(league.deadline) < new Date(new Date().toDateString());
 }
 
+/** Each league resets on its own schedule now, so the countdown pill has to be per-row, not one shared clock. */
+function SealedPill({ nextResetAt, isFinalStretch }: { nextResetAt: string; isFinalStretch: boolean }) {
+  const { t } = useTranslation();
+  const colors = useThemeColors();
+  const clock = useCountdownClock(nextResetAt);
+  return (
+    <View style={[styles.pill, { backgroundColor: isFinalStretch ? colors.accent : colors.accentChip, alignSelf: 'flex-start' }]}>
+      <Text style={[styles.pillText, { color: isFinalStretch ? colors.primaryText : colors.accent }]}>
+        {isFinalStretch ? `${t('home.yourLeagues.finalStretch')} · ` : ''}
+        {t('home.yourLeagues.sealedLeft', { time: clock.split(':').slice(0, 2).join(':') })}
+      </Text>
+    </View>
+  );
+}
+
 export function YourLeaguesPage({ width }: { width: number }) {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
-  const { profile } = useSession();
-  const clock = useCountdownClock(profile?.timezone);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -138,11 +150,7 @@ export function YourLeaguesPage({ width }: { width: number }) {
                   <Text style={[styles.pillText, { color: colors.primaryText }]}>{t('home.yourLeagues.youWon')}</Text>
                 </View>
               ) : !item.ended ? (
-                <View style={[styles.pill, { backgroundColor: colors.accentChip, alignSelf: 'flex-start' }]}>
-                  <Text style={[styles.pillText, { color: colors.accent }]}>
-                    {t('home.yourLeagues.sealedLeft', { time: clock.split(':').slice(0, 2).join(':') })}
-                  </Text>
-                </View>
+                <SealedPill nextResetAt={item.next_reset_at} isFinalStretch={isFinalResetBeforeDeadline(item.next_reset_at, item.deadline)} />
               ) : null}
             </View>
             <View style={{ alignItems: 'flex-end' }}>
